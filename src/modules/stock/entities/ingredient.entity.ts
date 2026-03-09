@@ -15,36 +15,100 @@ import { StockMovement } from './stock-movement.entity';
 import { IngredientCategory } from './ingredient-category.entity';
 import { IngredientLot } from './ingredient-lot.entity';
 
+
+/**
+ * Ingredient
+ * 
+ * Represents a raw material or supply used in recipes nad inventory
+ * 
+ * This entity defines the base information about an ingredient such as:
+ * - measurement unit
+ * - cost configuration
+ * - category
+ * - stock management parameters
+ * 
+ * Actual stock levels are managed through ingredient lots and stock movements,
+ * enabling traceability and FIFO/FEFO inventory strategies.
+ */
 @Entity('ingredients')
+
+/**
+ * Ensures ingredient names are unique per company.
+ *
+ * This allows different companies (tenants) to have ingredients
+ * with the same name while maintaining isolation between tenants.
+ */
 @Index(['companyId', 'name'], { unique: true })
 export class Ingredient extends BaseTenantEntity {
+  
+      /**
+   * Unique identifier for the ingredient.
+   */
   @PrimaryGeneratedColumn()
   id: number;
 
-  /** Nombre único. */
+  /**
+   * Ingredient name.
+   *
+   * Uniqueness is enforced per company via the composite index above.
+   */
   @Column({ length: 50, unique: false }) // La unicidad se maneja con el índice compuesto
   name: string;
 
-  /** Stock disponible (calculado a partir de los lotes). */
+    /**
+   * Current available stock quantity.
+   *
+   * This value is typically calculated dynamically based on
+   * the quantities of all associated ingredient lots.
+   *
+   * It is not persisted in the database.
+   */
   quantityInStock: number;
 
-  /** Unidad de medida del stock. */
+    /**
+   * Measurement unit used for this ingredient.
+   *
+   * Examples:
+   * - UNIT
+   * - KG
+   * - LITER
+   */
   @Column({ type: 'enum', enum: IngredientUnit, default: IngredientUnit.UNIT })
   unit: IngredientUnit;
 
-  /** Costo opcional de compra. */
+    /**
+   * Optional base purchase cost for the ingredient.
+   *
+   * This can serve as a reference cost when lot-level
+   * cost tracking is not available.
+   */
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   cost: number | null;
 
-  /** Tipo de cost0: por unidad o por peso/volumen. */
+    /**
+   * Defines how the ingredient cost is interpreted.
+   *
+   * Example:
+   * - cost per unit
+   * - cost per weight or volume
+   */
   @Column({ type: 'enum', enum: IngredientCostType, nullable: true })
   costType: IngredientCostType | null;
 
-  /** Descripción opcional. */
+    /**
+   * Optional description providing additional details
+   * about the ingredient.
+   */
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  // Relación ManyToOne con la entidad Category
+    /**
+   * Category assigned to the ingredient.
+   *
+   * Used for organization and filtering.
+   * If the category is deleted, the ingredient will remain
+   * but its category will be set to null.
+   */
   @ManyToOne(() => IngredientCategory, (category) => category.menuItems, {
     nullable: true,
     onDelete: 'SET NULL',
@@ -52,27 +116,66 @@ export class Ingredient extends BaseTenantEntity {
   })
   category: IngredientCategory | null;
 
-  /** Cantidad mínima de stock recomendada. */
+    /**
+   * Recommended minimum stock level.
+   *
+   * Used to trigger alerts when inventory falls below
+   * a defined threshold.
+   */
   @Column({ type: 'float', nullable: true })
   minStock: number | null;
 
-  /** Porcentaje de merma/rendimiento (ej: 20 para 20%) */
+    /**
+   * Shrinkage or yield percentage for the ingredient.
+   *
+   * Represents expected loss during preparation
+   * (e.g., trimming, cooking loss, evaporation).
+   *
+   * Example:
+   * 20 means 20% loss.
+   */
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
   shrinkagePercentage: number;
 
-  // Relaciones
+    /**
+   * Recipe relationships.
+   *
+   * Defines which recipes use this ingredient
+   * and in what quantities.
+   */
   @OneToMany(
     () => RecipeIngredient,
     (recipeIngredient) => recipeIngredient.ingredient,
   )
   recipeIngredients: RecipeIngredient[];
 
+
+  /**
+   * All stock movements affecting this ingredient.
+   *
+   * These movements represent inventory transactions
+   * such as purchases, consumption, adjustments, etc.
+   */
   @OneToMany(() => StockMovement, (movement) => movement.ingredient)
   stockMovements: StockMovement[];
 
+
+  /**
+   * Inventory lots associated with this ingredient.
+   *
+   * Each lot represents a batch with its own
+   * quantity, cost, and expiration date.
+   */
   @OneToMany(() => IngredientLot, (lot) => lot.ingredient)
   lots: IngredientLot[];
 
+    /**
+   * Indicates whether the ingredient is active
+   * and available for use in the system.
+   *
+   * Deactivating an ingredient prevents it from being
+   * used in new recipes or stock operations.
+   */
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 }
