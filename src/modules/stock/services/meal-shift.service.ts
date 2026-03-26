@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, Inject, forwardRef, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Raw } from 'typeorm';
+import { Repository, DataSource, Raw, MoreThan } from 'typeorm';
+import { IngredientLot } from '../entities/ingredient-lot.entity';
 import { MealShift } from '../entities/meal-shift.entity';
 import { CreateMealShiftDto } from '../dto/create-meal-shift.dto';
 import { UpdateMealShiftDto } from '../dto/update-meal-shift.dto';
@@ -84,20 +85,62 @@ export class MealShiftService {
           // Calcular la cantidad bruta necesaria para obtener la neta
           const grossQuantityPerUnit =
             netQuantityPerUnit / (1 - shrinkage / 100);
-          const totalGrossQuantityToConsume =
+          let remainingQuantityToConsume =
             grossQuantityPerUnit * quantityProduced;
 
-          await this.stockService.registerMovement(
+          if (remainingQuantityToConsume <= 0) {
+            continue; // Skip if no quantity to consume
+          }
+
+          // Fetch available IngredientLots for the current ingredient, ordered by ID (FIFO)
+          const ingredientLots = await queryRunner.manager.find(
+            IngredientLot,
             {
-              ingredientId: ingredient.id,
-              quantity: totalGrossQuantityToConsume, // <-- Usar cantidad bruta
-              movementType: MovementType.OUT,
-              reason: `Producción de ${menuItem.name}`,
+              where: {
+                ingredient: { id: ingredient.id },
+                companyId,
+                quantity: MoreThan(0), // Only consider lots with available stock
+              },
+              order: { id: 'ASC' }, // FIFO: consume oldest lots first
             },
-            companyId,
-            userId,
-            queryRunner,
           );
+
+          if (ingredientLots.length === 0) {
+            throw new BadRequestException(
+              `Stock insuficiente para el ingrediente: ${ingredient.name}. No hay lotes disponibles.`,
+            );
+          }
+
+          for (const lot of ingredientLots) {
+            if (remainingQuantityToConsume <= 0) break;
+
+            const amountToConsumeFromLot = Math.min(
+              remainingQuantityToConsume,
+              lot.quantity,
+            );
+
+            await this.stockService.registerMovement(
+              {
+                ingredientId: ingredient.id,
+                ingredientLotId: lot.id, // Pass the specific lot ID
+                quantity: amountToConsumeFromLot,
+                movementType: MovementType.OUT,
+                reason: `Producción de ${menuItem.name}`,
+              },
+              companyId,
+              userId,
+              queryRunner,
+            );
+
+            remainingQuantityToConsume -= amountToConsumeFromLot;
+          }
+
+          if (remainingQuantityToConsume > 0) {
+            // This means we ran out of stock before consuming the full quantity
+            throw new BadRequestException(
+              `Stock insuficiente para el ingrediente: ${ingredient.name}. Faltan ${remainingQuantityToConsume.toFixed(2)} unidades.`,
+            );
+          }
         }
       }
 

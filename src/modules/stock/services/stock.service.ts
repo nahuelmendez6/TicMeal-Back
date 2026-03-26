@@ -253,15 +253,31 @@ export class StockService {
       ingredientId,
       menuItemId,
       quantity,
-      lotNumber,
       unitCost,
       expirationDate,
     } = createDto;
 
-    if (lotNumber === undefined || unitCost === undefined) {
-      throw new BadRequestException(
-        'Para movimientos de ENTRADA, se requiere lotNumber y unitCost.',
-      );
+    if (ingredientId) {
+      if (createDto.lotNumber === undefined || unitCost === undefined) {
+        throw new BadRequestException(
+          'Para movimientos de ENTRADA de ingredientes, se requiere lotNumber y unitCost.',
+        );
+      }
+    } else if (menuItemId) {
+      if (unitCost === undefined) {
+        throw new BadRequestException(
+          'Para movimientos de ENTRADA de ítems de menú, se requiere unitCost.',
+        );
+      }
+      if (createDto.reason === 'Producción') {
+        if (createDto.lotNumber === undefined) {
+          createDto.lotNumber = `PROD-${new Date().toISOString().replace(/[:.-]/g, '')}`;
+        }
+      } else if (createDto.lotNumber === undefined) {
+        throw new BadRequestException(
+          'Para movimientos de ENTRADA de ítems de menú (no producción), se requiere lotNumber.',
+        );
+      }
     }
 
     let lot: IngredientLot | MenuItemLot;
@@ -278,7 +294,7 @@ export class StockService {
 
       const lotRepo = runner.manager.getRepository(IngredientLot);
       const existingLot = await lotRepo.findOne({
-        where: { lotNumber, ingredient: { id: ingredientId }, companyId },
+        where: { lotNumber: createDto.lotNumber, ingredient: { id: ingredientId }, companyId },
       });
 
       if (existingLot) {
@@ -290,7 +306,7 @@ export class StockService {
       } else {
         const newLot = lotRepo.create({
           ingredient,
-          lotNumber,
+          lotNumber: createDto.lotNumber,
           quantity,
           unitCost,
           expirationDate: expirationDate ? new Date(expirationDate) : null,
@@ -320,7 +336,7 @@ export class StockService {
 
       const lotRepo = runner.manager.getRepository(MenuItemLot);
       const existingLot = await lotRepo.findOne({
-        where: { lotNumber, menuItem: { id: menuItemId }, companyId },
+        where: { lotNumber: createDto.lotNumber, menuItem: { id: menuItemId }, companyId },
       });
 
       if (existingLot) {
@@ -332,7 +348,7 @@ export class StockService {
       } else {
         const newLot = lotRepo.create({
           menuItem,
-          lotNumber,
+          lotNumber: createDto.lotNumber,
           quantity,
           unitCost,
           expirationDate: expirationDate ? new Date(expirationDate) : null,
