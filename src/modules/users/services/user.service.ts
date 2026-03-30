@@ -152,7 +152,8 @@ export class UsersService {
       this.userRepo,
       id,
       companyId,
-      'user',
+      undefined, // Pass undefined for options
+      'user', // Pass 'user' as the alias
     );
   }
 

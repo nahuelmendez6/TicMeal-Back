@@ -1,4 +1,11 @@
-import { Injectable, NotFoundException, Logger, Inject, forwardRef, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Logger,
+  Inject,
+  forwardRef,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, Raw, MoreThan } from 'typeorm';
 import { IngredientLot } from '../entities/ingredient-lot.entity';
@@ -93,17 +100,14 @@ export class MealShiftService {
           }
 
           // Fetch available IngredientLots for the current ingredient, ordered by ID (FIFO)
-          const ingredientLots = await queryRunner.manager.find(
-            IngredientLot,
-            {
-              where: {
-                ingredient: { id: ingredient.id },
-                companyId,
-                quantity: MoreThan(0), // Only consider lots with available stock
-              },
-              order: { id: 'ASC' }, // FIFO: consume oldest lots first
+          const ingredientLots = await queryRunner.manager.find(IngredientLot, {
+            where: {
+              ingredient: { id: ingredient.id },
+              companyId,
+              quantity: MoreThan(0), // Only consider lots with available stock
             },
-          );
+            order: { id: 'ASC' }, // FIFO: consume oldest lots first
+          });
 
           if (ingredientLots.length === 0) {
             throw new BadRequestException(

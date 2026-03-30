@@ -5,6 +5,7 @@ import {
   OneToMany,
   Index,
   ManyToOne,
+  ManyToMany,
 } from 'typeorm';
 
 import { BaseTenantEntity } from 'src/common/entities/base-tenant.entity';
@@ -14,24 +15,23 @@ import { RecipeIngredient } from './recipe-ingredient.entity';
 import { StockMovement } from './stock-movement.entity';
 import { IngredientCategory } from './ingredient-category.entity';
 import { IngredientLot } from './ingredient-lot.entity';
-
+import { Observation } from 'src/modules/users/entities/observation.entity';
 
 /**
  * Ingredient
- * 
+ *
  * Represents a raw material or supply used in recipes nad inventory
- * 
+ *
  * This entity defines the base information about an ingredient such as:
  * - measurement unit
  * - cost configuration
  * - category
  * - stock management parameters
- * 
+ *
  * Actual stock levels are managed through ingredient lots and stock movements,
  * enabling traceability and FIFO/FEFO inventory strategies.
  */
 @Entity('ingredients')
-
 /**
  * Ensures ingredient names are unique per company.
  *
@@ -40,8 +40,7 @@ import { IngredientLot } from './ingredient-lot.entity';
  */
 @Index(['companyId', 'name'], { unique: true })
 export class Ingredient extends BaseTenantEntity {
-  
-      /**
+  /**
    * Unique identifier for the ingredient.
    */
   @PrimaryGeneratedColumn()
@@ -55,7 +54,7 @@ export class Ingredient extends BaseTenantEntity {
   @Column({ length: 50, unique: false }) // La unicidad se maneja con el índice compuesto
   name: string;
 
-    /**
+  /**
    * Current available stock quantity.
    *
    * This value is typically calculated dynamically based on
@@ -65,7 +64,7 @@ export class Ingredient extends BaseTenantEntity {
    */
   quantityInStock: number;
 
-    /**
+  /**
    * Measurement unit used for this ingredient.
    *
    * Examples:
@@ -76,7 +75,7 @@ export class Ingredient extends BaseTenantEntity {
   @Column({ type: 'enum', enum: IngredientUnit, default: IngredientUnit.UNIT })
   unit: IngredientUnit;
 
-    /**
+  /**
    * Optional base purchase cost for the ingredient.
    *
    * This can serve as a reference cost when lot-level
@@ -85,7 +84,7 @@ export class Ingredient extends BaseTenantEntity {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   cost: number | null;
 
-    /**
+  /**
    * Defines how the ingredient cost is interpreted.
    *
    * Example:
@@ -95,14 +94,14 @@ export class Ingredient extends BaseTenantEntity {
   @Column({ type: 'enum', enum: IngredientCostType, nullable: true })
   costType: IngredientCostType | null;
 
-    /**
+  /**
    * Optional description providing additional details
    * about the ingredient.
    */
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-    /**
+  /**
    * Category assigned to the ingredient.
    *
    * Used for organization and filtering.
@@ -116,7 +115,7 @@ export class Ingredient extends BaseTenantEntity {
   })
   category: IngredientCategory | null;
 
-    /**
+  /**
    * Recommended minimum stock level.
    *
    * Used to trigger alerts when inventory falls below
@@ -125,7 +124,7 @@ export class Ingredient extends BaseTenantEntity {
   @Column({ type: 'float', nullable: true })
   minStock: number | null;
 
-    /**
+  /**
    * Shrinkage or yield percentage for the ingredient.
    *
    * Represents expected loss during preparation
@@ -137,7 +136,7 @@ export class Ingredient extends BaseTenantEntity {
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
   shrinkagePercentage: number;
 
-    /**
+  /**
    * Recipe relationships.
    *
    * Defines which recipes use this ingredient
@@ -149,7 +148,6 @@ export class Ingredient extends BaseTenantEntity {
   )
   recipeIngredients: RecipeIngredient[];
 
-
   /**
    * All stock movements affecting this ingredient.
    *
@@ -158,7 +156,6 @@ export class Ingredient extends BaseTenantEntity {
    */
   @OneToMany(() => StockMovement, (movement) => movement.ingredient)
   stockMovements: StockMovement[];
-
 
   /**
    * Inventory lots associated with this ingredient.
@@ -169,7 +166,7 @@ export class Ingredient extends BaseTenantEntity {
   @OneToMany(() => IngredientLot, (lot) => lot.ingredient)
   lots: IngredientLot[];
 
-    /**
+  /**
    * Indicates whether the ingredient is active
    * and available for use in the system.
    *
@@ -178,4 +175,13 @@ export class Ingredient extends BaseTenantEntity {
    */
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  isFresh: boolean;
+
+  @ManyToMany(
+    () => Observation,
+    (observation: Observation) => observation.ingredients,
+  )
+  observations: Observation[];
 }

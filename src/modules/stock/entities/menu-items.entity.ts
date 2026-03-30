@@ -5,6 +5,7 @@ import {
   OneToMany,
   ManyToOne,
   Index,
+  ManyToMany,
 } from 'typeorm';
 
 import { BaseTenantEntity } from 'src/common/entities/base-tenant.entity';
@@ -14,6 +15,7 @@ import { StockMovement } from './stock-movement.entity';
 import { MenuItemLot } from './menu-item-lot.entity';
 
 import { MenuItemType } from '../enums/menuItemTypes';
+import { Observation } from 'src/modules/users/entities/observation.entity';
 
 @Entity('menu_items')
 
@@ -82,4 +84,10 @@ export class MenuItems extends BaseTenantEntity {
   lots: MenuItemLot[];
 
   isProduced?: boolean;
+
+  @ManyToMany(
+    () => Observation,
+    (observation: Observation) => observation.menuItems,
+  )
+  observations: Observation[];
 }

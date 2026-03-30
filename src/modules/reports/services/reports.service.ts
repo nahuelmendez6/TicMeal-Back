@@ -47,7 +47,7 @@ export class ReportsService {
     let totalVariance = 0;
     let totalPositiveVariance = 0; // Surplus
     let totalNegativeVariance = 0; // Shortage
-    let totalAudits = audits.length;
+    const totalAudits = audits.length;
 
     const detailedAudits = audits.map((audit) => {
       const monetaryDifference = audit.difference * audit.unitCostAtAudit;
@@ -63,8 +63,14 @@ export class ReportsService {
         id: audit.id,
         auditDate: audit.auditDate,
         auditType: audit.auditType,
-        itemName: audit.auditType === StockAuditType.INGREDIENT ? audit.ingredient?.name : audit.menuItem?.name,
-        itemId: audit.auditType === StockAuditType.INGREDIENT ? audit.ingredientId : audit.menuItemId,
+        itemName:
+          audit.auditType === StockAuditType.INGREDIENT
+            ? audit.ingredient?.name
+            : audit.menuItem?.name,
+        itemId:
+          audit.auditType === StockAuditType.INGREDIENT
+            ? audit.ingredientId
+            : audit.menuItemId,
         theoreticalStock: audit.theoreticalStock,
         physicalStock: audit.physicalStock,
         differenceQuantity: audit.difference,

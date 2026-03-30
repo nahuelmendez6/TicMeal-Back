@@ -18,6 +18,9 @@ import { PurchasesModule } from './modules/purchases/purchases.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { WasteModule } from './modules/waste/waste.module';
 import { CostingModule } from './modules/costing/costing.module';
+import { BookingsModule } from './modules/bookings/bookings.module';
+import { ProductionModule } from './modules/production/production.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 /**
  * Modulo raiz de la aplicación
@@ -26,6 +29,7 @@ import { CostingModule } from './modules/costing/costing.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }), // carga variables de entorno automaticamtne desde .env
+    ScheduleModule.forRoot(), // Importante para habilitar los CRON jobs
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -45,6 +49,8 @@ import { CostingModule } from './modules/costing/costing.module';
     SuppliersModule,
     WasteModule,
     CostingModule,
+    BookingsModule,
+    ProductionModule,
   ],
   providers: [TenantContextService, TenantInterceptor],
   exports: [TenantContextService, TenantInterceptor],

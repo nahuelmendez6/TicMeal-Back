@@ -14,7 +14,7 @@ export class CostingService {
     // Repository used to retrieve menu items and their associated recipe ingredients
     @InjectRepository(MenuItems)
     private readonly menuItemsRepo: Repository<MenuItems>,
-    
+
     // Repository used to retrieve ingredient stock lots for FIFO cost calculation
     @InjectRepository(IngredientLot)
     private readonly ingredientLotRepo: Repository<IngredientLot>,
@@ -22,11 +22,11 @@ export class CostingService {
 
   /**
    * Calculates the total production cost of a menu item based on its recipe
-   * 
+   *
    * The cost is determined by summing the cost of each ingredient required
    * in the recipe. Ingredient cost is calculated using a FIFO strategy
    * (based on available ingredient losts).
-   * 
+   *
    * Shrincage/waste percentage of each ingredient is also considered,
    * adjusting the real quantity needed to produce the recipe.
    * @param menuItemId  - ID of the menu item to calculate cost for
@@ -61,11 +61,11 @@ export class CostingService {
     // Iterate though each ingredient in the recipe
     for (const recipeIngredient of menuItem.recipeIngredients) {
       const { ingredient, quantity } = recipeIngredient;
-      
+
       /**
        * adjust required quantity considering ingredient shrinkage/waste.
        * Example:
-       * If a recipe needs 100g and shrinkage is 10%, the system must 
+       * If a recipe needs 100g and shrinkage is 10%, the system must
        * consume ~111g of raw ingredient to obtaing 100g usable
        */
       const realQuantity =
@@ -86,12 +86,12 @@ export class CostingService {
   /**
    * Calculates the cost of a given ingredient quantity using
    * FIFO lot consumption.
-   * 
+   *
    * Ingredient lots are ordered by expiration date
    * The method simulates stock consumption without
    * modifying actual inventory.
-   * 
-   * 
+   *
+   *
    * @param ingredientId - Ingredient indetifier
    * @param quantityNeeded - Quantity requried for the recipe
    * @param companyId  - Company identifier
@@ -130,7 +130,7 @@ export class CostingService {
       quantityToCover -= quantityToTake;
     }
 
-    // if not enough stock was available across all lots, throw an error  
+    // if not enough stock was available across all lots, throw an error
     if (quantityToCover > 0) {
       throw new BadRequestException(
         `Stock insuficiente para el ingrediente ${ingredientId}. Faltan ${quantityToCover} unidades.`,

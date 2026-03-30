@@ -36,16 +36,23 @@ export class StockService {
     companyId: number,
     userId: number,
   ): Promise<StockAudit> {
-    const { auditType, ingredientId, menuItemId, physicalStock, observations } = auditData;
+    const { auditType, ingredientId, menuItemId, physicalStock, observations } =
+      auditData;
 
     if (auditType === StockAuditType.INGREDIENT && !ingredientId) {
-      throw new BadRequestException('ingredientId es requerido para auditorías de INGREDIENT.');
+      throw new BadRequestException(
+        'ingredientId es requerido para auditorías de INGREDIENT.',
+      );
     }
     if (auditType === StockAuditType.MENU_ITEM && !menuItemId) {
-      throw new BadRequestException('menuItemId es requerido para auditorías de MENU_ITEM.');
+      throw new BadRequestException(
+        'menuItemId es requerido para auditorías de MENU_ITEM.',
+      );
     }
     if (ingredientId && menuItemId) {
-      throw new BadRequestException('No puede proporcionar ingredientId y menuItemId simultáneamente.');
+      throw new BadRequestException(
+        'No puede proporcionar ingredientId y menuItemId simultáneamente.',
+      );
     }
 
     return this.dataSource.transaction(async (manager) => {
@@ -69,7 +76,8 @@ export class StockService {
         theoreticalStock = lots.reduce((sum, lot) => sum + lot.quantity, 0);
         lastLot = lots.sort((a, b) => b.id - a.id)[0];
         unitCostAtAudit = lastLot ? lastLot.unitCost : 0;
-      } else { // StockAuditType.MENU_ITEM
+      } else {
+        // StockAuditType.MENU_ITEM
         entity = await manager.findOneBy(MenuItems, {
           id: menuItemId,
           companyId,
@@ -89,7 +97,8 @@ export class StockService {
 
       const audit = manager.create(StockAudit, {
         auditType,
-        ingredientId: auditType === StockAuditType.INGREDIENT ? ingredientId : null,
+        ingredientId:
+          auditType === StockAuditType.INGREDIENT ? ingredientId : null,
         menuItemId: auditType === StockAuditType.MENU_ITEM ? menuItemId : null,
         companyId,
         physicalStock,
@@ -113,10 +122,18 @@ export class StockService {
           const amountFromLot = Math.min(lot.quantity, amountToDecrease);
 
           const movementDto: CreateStockMovementDto = {
-            ingredientId: auditType === StockAuditType.INGREDIENT ? ingredientId : null,
-            menuItemId: auditType === StockAuditType.MENU_ITEM ? menuItemId : null,
-            ingredientLotId: auditType === StockAuditType.INGREDIENT ? (lot as IngredientLot).id : null,
-            menuItemLotId: auditType === StockAuditType.MENU_ITEM ? (lot as MenuItemLot).id : null,
+            ingredientId:
+              auditType === StockAuditType.INGREDIENT ? ingredientId : null,
+            menuItemId:
+              auditType === StockAuditType.MENU_ITEM ? menuItemId : null,
+            ingredientLotId:
+              auditType === StockAuditType.INGREDIENT
+                ? (lot as IngredientLot).id
+                : null,
+            menuItemLotId:
+              auditType === StockAuditType.MENU_ITEM
+                ? (lot as MenuItemLot).id
+                : null,
             quantity: amountFromLot,
             movementType: MovementType.OUT,
             reason: `Ajuste por auditoría #${savedAudit.id}`,
@@ -135,8 +152,10 @@ export class StockService {
         const amountToIncrease = Math.abs(difference);
         if (lastLot) {
           const movementDto: CreateStockMovementDto = {
-            ingredientId: auditType === StockAuditType.INGREDIENT ? ingredientId : null,
-            menuItemId: auditType === StockAuditType.MENU_ITEM ? menuItemId : null,
+            ingredientId:
+              auditType === StockAuditType.INGREDIENT ? ingredientId : null,
+            menuItemId:
+              auditType === StockAuditType.MENU_ITEM ? menuItemId : null,
             lotNumber: lastLot.lotNumber,
             quantity: amountToIncrease,
             movementType: MovementType.IN,
@@ -249,13 +268,8 @@ export class StockService {
     companyId: number,
     userId: number,
   ): Promise<StockMovement> {
-    const {
-      ingredientId,
-      menuItemId,
-      quantity,
-      unitCost,
-      expirationDate,
-    } = createDto;
+    const { ingredientId, menuItemId, quantity, unitCost, expirationDate } =
+      createDto;
 
     if (ingredientId) {
       if (createDto.lotNumber === undefined || unitCost === undefined) {
@@ -294,7 +308,11 @@ export class StockService {
 
       const lotRepo = runner.manager.getRepository(IngredientLot);
       const existingLot = await lotRepo.findOne({
-        where: { lotNumber: createDto.lotNumber, ingredient: { id: ingredientId }, companyId },
+        where: {
+          lotNumber: createDto.lotNumber,
+          ingredient: { id: ingredientId },
+          companyId,
+        },
       });
 
       if (existingLot) {
@@ -336,7 +354,11 @@ export class StockService {
 
       const lotRepo = runner.manager.getRepository(MenuItemLot);
       const existingLot = await lotRepo.findOne({
-        where: { lotNumber: createDto.lotNumber, menuItem: { id: menuItemId }, companyId },
+        where: {
+          lotNumber: createDto.lotNumber,
+          menuItem: { id: menuItemId },
+          companyId,
+        },
       });
 
       if (existingLot) {
