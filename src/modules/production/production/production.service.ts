@@ -6,10 +6,11 @@ import {
   Booking,
   BookingStatus,
 } from 'src/modules/bookings/entities/booking.entity';
-import { MealShift } from 'src/modules/stock/entities/meal-shift.entity';
+import { MealShift, Periodicity } from 'src/modules/stock/entities/meal-shift.entity';
 import { Company } from 'src/modules/companies/entities/company.entity';
 import { Repository } from 'typeorm';
-import { addDays, format } from 'date-fns';
+import { addDays, format, isSameDay, getDay } from 'date-fns';
+import { isWithinInterval } from 'date-fns/isWithinInterval'
 import { Ingredient } from 'src/modules/stock/entities/ingredient.entity';
 import { MenuItems } from 'src/modules/stock/entities/menu-items.entity';
 import { RecipeIngredient } from 'src/modules/stock/entities/recipe-ingredient.entity';
@@ -52,54 +53,95 @@ export class ProductionService {
     private readonly supplierRepository: Repository<Supplier>, // To find a default supplier for JIT orders
   ) {}
 
+      private isMealShiftActiveForDate(
+    mealShift: MealShift,
+    targetDate: Date,
+  ): boolean {
+    // Check if targetDate is within the mealShift's active interval
+    const isWithinActiveInterval = isWithinInterval(targetDate, {
+      start: mealShift.startDate,
+      end: mealShift.endDate || targetDate, // If no end date, it's active indefinitely from start date
+    });
+
+    if (!isWithinActiveInterval) {
+      return false;
+    }
+
+    switch (mealShift.periodicity) {
+      case Periodicity.ONCE:
+        return isSameDay(mealShift.startDate, targetDate); // For ONCE, it must be the exact start date
+      case Periodicity.DAILY:
+        return true; // Always active within the interval
+      case Periodicity.WEEKLY:
+        const targetDay = getDay(targetDate); // 0 for Sunday, 1 for Monday, etc.
+        return mealShift.daysOfWeek?.includes(targetDay) || false;
+      default:
+        return false;
+    }
+  }
+
   @Cron(CronExpression.EVERY_DAY_AT_2AM) // Runs every day at 2 AM
   async handleProductionPlan() {
     this.logger.log('Starting daily production plan generation...');
 
-    const tomorrow = addDays(new Date(), 1);
-    const targetDate = format(tomorrow, 'yyyy-MM-dd'); // Format for database date comparison
+    const targetDate = addDays(new Date(), 1); // Get tomorrow's date
+    const formattedTargetDate = format(targetDate, 'yyyy-MM-dd');
 
     const companies = await this.companyRepository.find();
 
     for (const company of companies) {
       this.logger.log(
-        `Processing company: ${company.name} (ID: ${company.id})`,
+        `Processing company: ${company.name} (ID: ${company.id}) for ${formattedTargetDate}`,
       );
 
-      // 1. Get all confirmed bookings for the next day for the current company
-      const bookings = await TenantAwareRepository.findAllByTenant(
-        this.bookingRepository,
+      // 1. Get all MealShifts for the company
+      const allMealShifts = await TenantAwareRepository.findAllByTenant(
+        this.mealShiftRepository,
         company.id,
-        {
-          where: {
-            status: BookingStatus.CONFIRMED,
-            mealShift: {
-              date: new Date(targetDate), // Filter by the date of the MealShift
-            },
-          },
-          relations: {
-            mealShift: true,
-          }, // Eager load mealShift to access its date
-        },
       );
 
-      if (bookings.length === 0) {
+      // 2. Filter MealShifts that are active for the target date
+      const activeMealShifts = allMealShifts.filter((mealShift) =>
+        this.isMealShiftActiveForDate(mealShift, targetDate),
+      );
+
+      if (activeMealShifts.length === 0) {
         this.logger.log(
-          `No confirmed bookings for ${targetDate} for company ${company.id}.`,
+          `No active MealShifts found for ${formattedTargetDate} for company ${company.id}.`,
         );
         continue;
       }
 
-      // 2. Consolidate bookings by mealShiftId
-      const consolidatedBookings = bookings.reduce((acc, booking) => {
-        if (!acc[booking.mealShiftId]) {
-          acc[booking.mealShiftId] = 0;
-        }
-        acc[booking.mealShiftId] += 1; // Assuming each booking is for one unit
-        return acc;
-      }, {});
+      // Prepare to consolidate bookings
+      const consolidatedBookings: { [mealShiftId: number]: number } = {};
 
-      // 3. Update quantityProduced for each MealShift
+      for (const mealShift of activeMealShifts) {
+        // 3. Get all confirmed bookings for the current active MealShift
+        const bookings = await TenantAwareRepository.findAllByTenant(
+          this.bookingRepository,
+          company.id,
+          {
+            where: {
+              status: BookingStatus.CONFIRMED,
+              mealShiftId: mealShift.id, // Filter by mealShiftId
+            },
+          },
+        );
+
+        if (bookings.length > 0) {
+          consolidatedBookings[mealShift.id] =
+            (consolidatedBookings[mealShift.id] || 0) + bookings.length;
+        }
+      }
+
+      if (Object.keys(consolidatedBookings).length === 0) {
+        this.logger.log(
+          `No confirmed bookings for any active meal shifts for ${formattedTargetDate} for company ${company.id}.`,
+        );
+        continue;
+      }
+
+      // 4. Update quantityProduced for each MealShift based on consolidated bookings
       for (const mealShiftId in consolidatedBookings) {
         const totalBookedQuantity = consolidatedBookings[mealShiftId];
 
@@ -111,12 +153,11 @@ export class ProductionService {
           );
 
         if (mealShift) {
-          const originalQuantityProduced = mealShift.quantityProduced; // Store for comparison
+          const originalQuantityProduced = mealShift.quantityProduced;
           mealShift.quantityProduced = totalBookedQuantity;
           await this.mealShiftRepository.save(mealShift);
           this.logger.log(
-            `Updated MealShift ID ${mealShift.id} for company ${company.id}: quantityProduced from ${originalQuantityProduced} to ${mealShift.quantityProduced}. ` +
-              `quantityAvailable adjusted to ${mealShift.quantityAvailable}.`,
+            `Updated MealShift ID ${mealShift.id} for company ${company.id}: quantityProduced from ${originalQuantityProduced} to ${mealShift.quantityProduced}. `,
           );
         } else {
           this.logger.warn(
@@ -124,7 +165,7 @@ export class ProductionService {
           );
         }
       }
-      await this._processProductionForCompany(company.id, targetDate);
+      await this._processProductionForCompany(company.id, formattedTargetDate);
     }
     this.logger.log('Daily production plan generation completed.');
   }
@@ -137,12 +178,11 @@ export class ProductionService {
       `Processing production details for company ${companyId} on ${targetDate}...`,
     );
 
-    // 1. Fetch all MealShifts for the target date with quantityProduced > 0
-    const mealShifts: MealShift[] = await TenantAwareRepository.findAllByTenant(
+    // 1. Fetch all MealShifts for the company
+    const allMealShifts: MealShift[] = await TenantAwareRepository.findAllByTenant(
       this.mealShiftRepository,
       companyId,
       {
-        where: { date: new Date(targetDate) },
         relations: {
           menuItem: {
             recipeIngredients: {
@@ -154,9 +194,16 @@ export class ProductionService {
       },
     );
 
-    if (mealShifts.length === 0) {
+    // Filter MealShifts that are active for the target date and have quantityProduced > 0
+    const activeMealShifts = allMealShifts.filter(
+      (mealShift) =>
+        this.isMealShiftActiveForDate(mealShift, new Date(targetDate)) &&
+        mealShift.quantityProduced > 0,
+    );
+
+    if (activeMealShifts.length === 0) {
       this.logger.log(
-        `No MealShifts with production for company ${companyId} on ${targetDate}.`,
+        `No active MealShifts with production for company ${companyId} on ${targetDate}.`,
       );
       return;
     }
@@ -167,7 +214,7 @@ export class ProductionService {
     >();
 
     // 2. BOM Explosion: Calculate total required quantity for each ingredient
-    for (const mealShift of mealShifts) {
+    for (const mealShift of activeMealShifts) {
       if (mealShift.quantityProduced <= 0) continue; // Only process if there's production
 
       for (const recipeIngredient of mealShift.menuItem.recipeIngredients) {

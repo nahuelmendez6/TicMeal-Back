@@ -12,13 +12,32 @@ import { MenuItems } from './menu-items.entity';
 // Verify this path matches your Shift entity location
 import { Shift } from 'src/modules/shift/entities/shift.entity';
 
+export enum Periodicity {
+  ONCE = 'ONCE',
+  DAILY = 'DAILY',
+  WEEKLY = 'WEEKLY',
+}
+
 @Entity('meal_shifts')
 export class MealShift extends BaseTenantEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({
+    type: 'enum',
+    enum: Periodicity,
+    default: Periodicity.ONCE,
+  })
+  periodicity: Periodicity;
+
   @Column({ type: 'date' })
-  date: Date;
+  startDate: Date;
+
+  @Column({ type: 'date', nullable: true })
+  endDate: Date | null;
+
+  @Column('simple-array', { nullable: true })
+  daysOfWeek: number[] | null; // e.g., [1, 3, 5] for Mon, Wed, Fri
 
   @ManyToOne(() => Shift)
   @JoinColumn({ name: 'shiftId' })

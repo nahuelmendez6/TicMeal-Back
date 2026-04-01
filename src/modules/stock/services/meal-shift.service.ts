@@ -9,13 +9,15 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, Raw, MoreThan } from 'typeorm';
 import { IngredientLot } from '../entities/ingredient-lot.entity';
-import { MealShift } from '../entities/meal-shift.entity';
+import { MealShift, Periodicity } from '../entities/meal-shift.entity'; // Added Periodicity
 import { CreateMealShiftDto } from '../dto/create-meal-shift.dto';
 import { UpdateMealShiftDto } from '../dto/update-meal-shift.dto';
 import { MenuItems } from '../entities/menu-items.entity';
 import { MovementType } from '../enums/enums';
 import { StockService } from './stock.service';
 import { CostingService } from 'src/modules/costing/services/costing.service';
+import { isSameDay, getDay } from 'date-fns'; // Added date-fns imports
+import { isWithinInterval } from 'date-fns/isWithinInterval';
 
 @Injectable()
 export class MealShiftService {
@@ -29,6 +31,32 @@ export class MealShiftService {
     private readonly costingService: CostingService,
     private readonly dataSource: DataSource,
   ) {}
+
+  private isMealShiftActiveForDate(
+    mealShift: MealShift,
+    targetDate: Date,
+  ): boolean {
+    const isWithinActiveInterval = isWithinInterval(targetDate, {
+      start: mealShift.startDate,
+      end: mealShift.endDate || targetDate,
+    });
+
+    if (!isWithinActiveInterval) {
+      return false;
+    }
+
+    switch (mealShift.periodicity) {
+      case Periodicity.ONCE:
+        return isSameDay(mealShift.startDate, targetDate);
+      case Periodicity.DAILY:
+        return true;
+      case Periodicity.WEEKLY:
+        const targetDay = getDay(targetDate);
+        return mealShift.daysOfWeek?.includes(targetDay) || false;
+      default:
+        return false;
+    }
+  }
 
   async create(
     createMealShiftDto: CreateMealShiftDto,
@@ -55,7 +83,8 @@ export class MealShiftService {
 
       const mealShift = queryRunner.manager.create(MealShift, {
         ...createMealShiftDto,
-        date: new Date(createMealShiftDto.date).toISOString().split('T')[0],
+        startDate: new Date(createMealShiftDto.startDate), // Convert string to Date object
+        endDate: createMealShiftDto.endDate ? new Date(createMealShiftDto.endDate) : null,
         companyId,
         quantityAvailable:
           createMealShiftDto.quantityAvailable ?? quantityProduced,
@@ -162,7 +191,7 @@ export class MealShiftService {
     return await this.mealShiftRepository.find({
       where: { companyId },
       relations: ['shift', 'menuItem'],
-      order: { date: 'DESC' },
+      order: { startDate: 'DESC', shiftId: 'ASC' },
     });
   }
 
@@ -200,25 +229,26 @@ export class MealShiftService {
   async isMenuItemProducedForShift(
     menuItemId: number,
     shiftId: number,
-    date: Date,
+    targetDate: Date,
     companyId: number,
   ): Promise<boolean> {
     this.logger.log(
-      `Checking production for menuItemId: ${menuItemId}, shiftId: ${shiftId}, date: ${date.toISOString()}, companyId: ${companyId}`,
+      `Checking production for menuItemId: ${menuItemId}, shiftId: ${shiftId}, targetDate: ${targetDate.toISOString()}, companyId: ${companyId}`,
     );
 
-    const dateString = date.toISOString().split('T')[0];
-
-    const mealShift = await this.mealShiftRepository.findOne({
+    const mealShifts = await this.mealShiftRepository.find({
       where: {
         menuItemId,
         shiftId,
         companyId,
-        date: Raw((alias) => `${alias} = :date`, { date: dateString }),
       },
     });
 
-    const result = mealShift && mealShift.quantityProduced > 0;
+    const activeMealShift = mealShifts.find((mealShift) =>
+      this.isMealShiftActiveForDate(mealShift, targetDate),
+    );
+
+    const result = activeMealShift && activeMealShift.quantityProduced > 0;
     this.logger.log(`Production check result: ${result}`);
 
     return result;
