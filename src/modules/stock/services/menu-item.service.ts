@@ -16,6 +16,7 @@ import { MenuItemType } from '../enums/menuItemTypes';
 import { RecipeIngredient } from '../entities/recipe-ingredient.entity';
 import { MealShiftService } from './meal-shift.service';
 import { StockService } from './stock.service';
+import { NutritionalInfo } from '../dto/nutritional-info.dto';
 
 @Injectable()
 export class MenuItemService {
@@ -231,6 +232,61 @@ export class MenuItemService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  async calculateAndCacheNutritionalInfo(menuItemId: number): Promise<NutritionalInfo | null> {
+    const menuItem = await this.menuItemRepo.findOne({
+      where: { id: menuItemId },
+      relations: ['recipeIngredients', 'recipeIngredients.ingredient'], // ¡Importante cargar las relaciones!
+    });
+  
+    if (!menuItem || menuItem.type !== MenuItemType.PRODUCTO_COMPUESTO) {
+      // Si no es un producto compuesto, no hay nada que calcular.
+      // Su información nutricional se gestiona manualmente.
+      return menuItem.nutritionalInfo;
+    }
+  
+    if (!menuItem.recipeIngredients || menuItem.recipeIngredients.length === 0) {
+      // Si no tiene receta, la info es nula.
+      await this.menuItemRepo.update(menuItemId, { nutritionalInfo: null });
+      return null;
+    }
+  
+    // Inicializamos el acumulador
+    const totalNutritionalInfo: NutritionalInfo = {
+      calories: 0,
+      protein: 0,
+      carbohydrates: 0,
+      fat: 0,
+      sugar: 0,
+      sodium: 0
+    };
+  
+    for (const recipeIngredient of menuItem.recipeIngredients) {
+      const { ingredient, quantity } = recipeIngredient;
+  
+      // Si un ingrediente no tiene info nutricional, lo omitimos.
+      if (!ingredient || !ingredient.nutritionalInfo) {
+        continue;
+      }
+  
+      // Aquí asumimos que la info del ingrediente está por 100g/ml
+      // y que la cantidad en la receta está en g/ml.
+      // ¡DEBES AJUSTAR ESTA LÓGICA A TUS UNIDADES!
+      const scale = quantity / 100;
+  
+      totalNutritionalInfo.calories += ingredient.nutritionalInfo.calories * scale;
+      totalNutritionalInfo.protein += ingredient.nutritionalInfo.protein * scale;
+      totalNutritionalInfo.carbohydrates += ingredient.nutritionalInfo.carbohydrates * scale;
+      totalNutritionalInfo.fat += ingredient.nutritionalInfo.fat * scale;
+      totalNutritionalInfo.sugar += (ingredient.nutritionalInfo.sugar || 0) * scale;
+      totalNutritionalInfo.sodium += (ingredient.nutritionalInfo.sodium || 0) * scale;
+    }
+  
+    // Guardamos el resultado calculado (caché) en el MenuItem
+    await this.menuItemRepo.update(menuItemId, { nutritionalInfo: totalNutritionalInfo });
+  
+    return totalNutritionalInfo;
   }
 
   async remove(id: number, companyId: number): Promise<boolean> {
