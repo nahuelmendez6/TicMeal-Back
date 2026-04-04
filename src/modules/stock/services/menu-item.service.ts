@@ -91,6 +91,7 @@ export class MenuItemService {
       // Initial stock must now be added via an explicit stock movement, not on creation.
 
       await queryRunner.commitTransaction();
+      await this.calculateAndCacheNutritionalInfo(savedMenuItem.id);
       return this.findOneForTenant(savedMenuItem.id, companyId);
     } catch (err) {
       await queryRunner.rollbackTransaction();
@@ -225,6 +226,7 @@ export class MenuItemService {
       // Stock adjustments must be done via explicit calls to StockService.
 
       await queryRunner.commitTransaction();
+      await this.calculateAndCacheNutritionalInfo(id);
       return this.findOneForTenant(id, companyId);
     } catch (err) {
       await queryRunner.rollbackTransaction();
@@ -287,6 +289,23 @@ export class MenuItemService {
     await this.menuItemRepo.update(menuItemId, { nutritionalInfo: totalNutritionalInfo });
   
     return totalNutritionalInfo;
+  }
+
+  async recalculateNutritionalInfoForIngredient(ingredientId: number) {
+    const menuItems = await this.menuItemRepo.find({
+      where: {
+        recipeIngredients: {
+          ingredient: {
+            id: ingredientId
+          }
+        }
+      },
+      relations: ['recipeIngredients']
+    });
+
+    for (const menuItem of menuItems) {
+      await this.calculateAndCacheNutritionalInfo(menuItem.id);
+    }
   }
 
   async remove(id: number, companyId: number): Promise<boolean> {
