@@ -11,6 +11,7 @@ import {
   IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { NutritionalInfo } from './nutritional-info.dto';
 
 import { MenuItemType } from '../enums/menuItemTypes';
 
@@ -68,6 +69,11 @@ export class CreateMenuItemDto {
   @IsOptional()
   @IsEnum(MenuItemType)
   type?: MenuItemType;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NutritionalInfo)
+  nutritionalInfo?: NutritionalInfo;
 
   @IsOptional()
   @IsArray()

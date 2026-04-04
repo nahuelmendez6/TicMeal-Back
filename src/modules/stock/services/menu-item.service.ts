@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -26,6 +28,7 @@ export class MenuItemService {
     @InjectRepository(RecipeIngredient)
     private readonly recipeIngredientRepo: Repository<RecipeIngredient>,
     private readonly categoryService: CategoryService,
+    @Inject(forwardRef(() => IngredientService))
     private readonly ingredientService: IngredientService,
     private readonly mealShiftService: MealShiftService,
     private readonly stockService: StockService,

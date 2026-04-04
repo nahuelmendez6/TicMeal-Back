@@ -13,6 +13,7 @@ import {
   Max,
 } from 'class-validator';
 import { IngredientUnit, IngredientCostType } from '../enums/enums';
+import { NutritionalInfo } from './nutritional-info.dto';
 
 export class CreateIngredientDto {
   /** Tenant (heredado de BaseTenantEntity) */
@@ -77,4 +78,7 @@ export class CreateIngredientDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  nutritionalInfo?: NutritionalInfo;
 }

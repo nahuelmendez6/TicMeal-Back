@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Ingredient } from '../entities/ingredient.entity';
@@ -8,6 +8,7 @@ import { UpdateIngredientDto } from '../dto/update-ingredient.dto';
 import { IngredientCategoryService } from './ingredient-category.service';
 import { StockService } from './stock.service';
 import { MovementType } from '../enums/enums';
+import { MenuItemService } from './menu-item.service';
 
 @Injectable()
 export class IngredientService {
@@ -17,6 +18,8 @@ export class IngredientService {
     private readonly ingredientCategoryService: IngredientCategoryService,
     private readonly stockService: StockService,
     private readonly dataSource: DataSource,
+    @Inject(forwardRef(() => MenuItemService))
+    private readonly menuItemService: MenuItemService,
   ) {}
 
   async create(
@@ -145,6 +148,9 @@ export class IngredientService {
       // Stock adjustments must be done via explicit calls to StockService.
 
       await queryRunner.commitTransaction();
+      if (updateDto.nutritionalInfo) {
+        await this.menuItemService.recalculateNutritionalInfoForIngredient(id);
+      }
       return this.findOneForTenant(id, companyId);
     } catch (err) {
       await queryRunner.rollbackTransaction();
