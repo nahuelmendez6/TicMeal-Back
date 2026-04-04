@@ -16,6 +16,7 @@ import { MenuItemLot } from './menu-item-lot.entity';
 
 import { MenuItemType } from '../enums/menuItemTypes';
 import { Observation } from 'src/modules/users/entities/observation.entity';
+import { NutritionalInfo } from '../dto/nutritional-info.dto';
 
 @Entity('menu_items')
 
@@ -69,6 +70,17 @@ export class MenuItems extends BaseTenantEntity {
   /** cantudad maxima de item permitido en una orden */
   @Column({ type: 'int', nullable: true })
   maxOrder: number | null;
+
+  /**
+   * For SIMPLE items, this stores the product's direct nutritional facts.
+   * For COMPOUND items, this stores the calculated nutritional total
+   * from its recipe ingredients, acting as a cache.
+   */
+  @Column({
+    type: 'jsonb',
+    nullable: true,
+  })
+  nutritionalInfo: NutritionalInfo | null;
 
   // Relaciones
   @OneToMany(

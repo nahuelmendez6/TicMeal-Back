@@ -16,6 +16,7 @@ import { StockMovement } from './stock-movement.entity';
 import { IngredientCategory } from './ingredient-category.entity';
 import { IngredientLot } from './ingredient-lot.entity';
 import { Observation } from 'src/modules/users/entities/observation.entity';
+import { NutritionalInfo } from '../dto/nutritional-info.dto';
 
 /**
  * Ingredient
@@ -137,6 +138,16 @@ export class Ingredient extends BaseTenantEntity {
   shrinkagePercentage: number;
 
   /**
+   * Nutritional information for the ingredient, typically per 100g or base unit.
+   * This serves as the source of truth for recipe nutritional calculations.
+   */
+  @Column({
+    type: 'jsonb',
+    nullable: true,
+  })
+  nutritionalInfo: NutritionalInfo | null;
+
+  /**
    * Recipe relationships.
    *
    * Defines which recipes use this ingredient
@@ -185,3 +196,4 @@ export class Ingredient extends BaseTenantEntity {
   )
   observations: Observation[];
 }
+
