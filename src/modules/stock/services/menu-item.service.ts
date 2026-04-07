@@ -19,6 +19,7 @@ import { RecipeIngredient } from '../entities/recipe-ingredient.entity';
 import { MealShiftService } from './meal-shift.service';
 import { StockService } from './stock.service';
 import { NutritionalInfo } from '../dto/nutritional-info.dto';
+import { IngredientUnit } from '../enums/enums';
 
 @Injectable()
 export class MenuItemService {
@@ -264,26 +265,53 @@ export class MenuItemService {
       carbohydrates: 0,
       fat: 0,
       sugar: 0,
-      sodium: 0
+      sodium: 0,
     };
-  
+
     for (const recipeIngredient of menuItem.recipeIngredients) {
       const { ingredient, quantity } = recipeIngredient;
-  
-      // Si un ingrediente no tiene info nutricional, lo omitimos.
+
       if (!ingredient || !ingredient.nutritionalInfo) {
         continue;
       }
-  
-      // Aquí asumimos que la info del ingrediente está por 100g/ml
-      // y que la cantidad en la receta está en g/ml.
-      // ¡DEBES AJUSTAR ESTA LÓGICA A TUS UNIDADES!
-      const scale = quantity / 100;
-  
-      totalNutritionalInfo.calories += ingredient.nutritionalInfo.calories * scale;
-      totalNutritionalInfo.protein += ingredient.nutritionalInfo.protein * scale;
-      totalNutritionalInfo.carbohydrates += ingredient.nutritionalInfo.carbohydrates * scale;
-      totalNutritionalInfo.fat += ingredient.nutritionalInfo.fat * scale;
+
+      let normalizedQuantity: number;
+      let divisor: number;
+
+      if (ingredient.unit === IngredientUnit.UNIT) {
+        // If unit is UNIT, assume nutritional info is per 1 unit.
+        // And the quantity in the recipe is also in 'units'.
+        normalizedQuantity = quantity;
+        divisor = 1; // Nutritional info is per 1 unit, so scale by quantity directly
+      } else {
+        // For g, kg, ml, l, assume nutritional info is per 100 units.
+        // Convert recipe quantity to the smallest relevant unit (grams for weight, ml for volume)
+        // based on the ingredient's unit.
+        switch (ingredient.unit) {
+          case IngredientUnit.GRAMS:
+            normalizedQuantity = quantity; // quantity is already in grams
+            break;
+          case IngredientUnit.KILOGRAMS:
+            normalizedQuantity = quantity * 1000; // convert kg to grams
+            break;
+          case IngredientUnit.MILLILITERS:
+            normalizedQuantity = quantity; // quantity is already in milliliters
+            break;
+          case IngredientUnit.LITERS:
+            normalizedQuantity = quantity * 1000; // convert liters to milliliters
+            break;
+          default:
+            normalizedQuantity = quantity; // Fallback, should not happen, but keep for safety
+        }
+        divisor = 100; // Nutritional info is typically per 100g/ml
+      }
+
+      const scale = normalizedQuantity / divisor;
+
+      totalNutritionalInfo.calories += (ingredient.nutritionalInfo.calories || 0) * scale;
+      totalNutritionalInfo.protein += (ingredient.nutritionalInfo.protein || 0) * scale;
+      totalNutritionalInfo.carbohydrates += (ingredient.nutritionalInfo.carbohydrates || 0) * scale;
+      totalNutritionalInfo.fat += (ingredient.nutritionalInfo.fat || 0) * scale;
       totalNutritionalInfo.sugar += (ingredient.nutritionalInfo.sugar || 0) * scale;
       totalNutritionalInfo.sodium += (ingredient.nutritionalInfo.sodium || 0) * scale;
     }
@@ -293,6 +321,7 @@ export class MenuItemService {
   
     return totalNutritionalInfo;
   }
+
 
   async recalculateNutritionalInfoForIngredient(ingredientId: number) {
     const menuItems = await this.menuItemRepo.find({
