@@ -90,12 +90,15 @@ export class MenuItemService {
             quantity: ri.quantity,
           }),
         );
-        await queryRunner.manager.save(recipe);
+        const savedRecipeIngredients = await queryRunner.manager.save(recipe);
+        savedMenuItem.recipeIngredients = savedRecipeIngredients; // Populate the relation
       }
+      await queryRunner.manager.getRepository(MenuItems).reload(savedMenuItem); // Reload to ensure relations are loaded
+
       // Initial stock must now be added via an explicit stock movement, not on creation.
 
       await queryRunner.commitTransaction();
-      await this.calculateAndCacheNutritionalInfo(savedMenuItem.id);
+      await this.calculateAndCacheNutritionalInfo(savedMenuItem); // Pass the fully loaded object
       return this.findOneForTenant(savedMenuItem.id, companyId);
     } catch (err) {
       await queryRunner.rollbackTransaction();
@@ -222,16 +225,20 @@ export class MenuItemService {
               quantity: ri.quantity,
             }),
           );
-          await queryRunner.manager.save(newRecipe);
+          const savedRecipeIngredients = await queryRunner.manager.save(newRecipe);
+          menuItemToUpdate.recipeIngredients = savedRecipeIngredients; // Populate the relation
+        } else {
+          menuItemToUpdate.recipeIngredients = []; // Clear if no recipe items
         }
       }
+      await queryRunner.manager.getRepository(MenuItems).reload(menuItemToUpdate); // Reload to ensure relations are loaded
 
       // The block that caused the error has been removed.
       // Stock adjustments must be done via explicit calls to StockService.
 
       await queryRunner.commitTransaction();
-      await this.calculateAndCacheNutritionalInfo(id);
-      return this.findOneForTenant(id, companyId);
+      await this.calculateAndCacheNutritionalInfo(menuItemToUpdate); // Pass the fully loaded object
+      return this.findOneForTenant(menuItemToUpdate.id, companyId);
     } catch (err) {
       await queryRunner.rollbackTransaction();
       throw err;
@@ -240,12 +247,9 @@ export class MenuItemService {
     }
   }
 
-  async calculateAndCacheNutritionalInfo(menuItemId: number): Promise<NutritionalInfo | null> {
-    const menuItem = await this.menuItemRepo.findOne({
-      where: { id: menuItemId },
-      relations: ['recipeIngredients', 'recipeIngredients.ingredient'], // ¡Importante cargar las relaciones!
-    });
+  async calculateAndCacheNutritionalInfo(menuItem: MenuItems): Promise<NutritionalInfo | null> {
   
+
     if (!menuItem || menuItem.type !== MenuItemType.PRODUCTO_COMPUESTO) {
       // Si no es un producto compuesto, no hay nada que calcular.
       // Su información nutricional se gestiona manualmente.
@@ -254,7 +258,8 @@ export class MenuItemService {
   
     if (!menuItem.recipeIngredients || menuItem.recipeIngredients.length === 0) {
       // Si no tiene receta, la info es nula.
-      await this.menuItemRepo.update(menuItemId, { nutritionalInfo: null });
+      console.log(`[MenuItemService] No recipe ingredients found for MenuItem ${menuItem.id}. Setting nutritionalInfo to null.`);
+      await this.menuItemRepo.update(menuItem.id, { nutritionalInfo: null });
       return null;
     }
   
@@ -268,6 +273,7 @@ export class MenuItemService {
       sodium: 0,
     };
 
+
     for (const recipeIngredient of menuItem.recipeIngredients) {
       const { ingredient, quantity } = recipeIngredient;
 
@@ -279,34 +285,36 @@ export class MenuItemService {
       let divisor: number;
 
       if (ingredient.unit === IngredientUnit.UNIT) {
-        // If unit is UNIT, assume nutritional info is per 1 unit.
-        // And the quantity in the recipe is also in 'units'.
         normalizedQuantity = quantity;
-        divisor = 1; // Nutritional info is per 1 unit, so scale by quantity directly
+        divisor = 1;
       } else {
-        // For g, kg, ml, l, assume nutritional info is per 100 units.
-        // Convert recipe quantity to the smallest relevant unit (grams for weight, ml for volume)
-        // based on the ingredient's unit.
         switch (ingredient.unit) {
           case IngredientUnit.GRAMS:
-            normalizedQuantity = quantity; // quantity is already in grams
+            normalizedQuantity = quantity;
             break;
           case IngredientUnit.KILOGRAMS:
-            normalizedQuantity = quantity * 1000; // convert kg to grams
+            normalizedQuantity = quantity * 1000;
             break;
           case IngredientUnit.MILLILITERS:
-            normalizedQuantity = quantity; // quantity is already in milliliters
+            normalizedQuantity = quantity;
             break;
           case IngredientUnit.LITERS:
-            normalizedQuantity = quantity * 1000; // convert liters to milliliters
+            normalizedQuantity = quantity * 1000;
             break;
           default:
-            normalizedQuantity = quantity; // Fallback, should not happen, but keep for safety
+            normalizedQuantity = quantity;
         }
-        divisor = 100; // Nutritional info is typically per 100g/ml
+        divisor = 100;
       }
 
       const scale = normalizedQuantity / divisor;
+
+      // --- Debugging logs for scaling ---
+      console.log(`Normalized Quantity: ${normalizedQuantity}`);
+      console.log(`Divisor: ${divisor}`);
+      console.log(`Scale: ${scale}`);
+      console.log(`Calculated calories contribution: ${(ingredient.nutritionalInfo.calories || 0) * scale}`);
+      // --- End Debugging logs ---
 
       totalNutritionalInfo.calories += (ingredient.nutritionalInfo.calories || 0) * scale;
       totalNutritionalInfo.protein += (ingredient.nutritionalInfo.protein || 0) * scale;
@@ -314,10 +322,10 @@ export class MenuItemService {
       totalNutritionalInfo.fat += (ingredient.nutritionalInfo.fat || 0) * scale;
       totalNutritionalInfo.sugar += (ingredient.nutritionalInfo.sugar || 0) * scale;
       totalNutritionalInfo.sodium += (ingredient.nutritionalInfo.sodium || 0) * scale;
+      console.log(`Total Nutritional Info after ${ingredient?.name}:`, totalNutritionalInfo); // Log after each ingredient
     }
-  
     // Guardamos el resultado calculado (caché) en el MenuItem
-    await this.menuItemRepo.update(menuItemId, { nutritionalInfo: totalNutritionalInfo });
+    await this.menuItemRepo.update(menuItem.id, { nutritionalInfo: totalNutritionalInfo });
   
     return totalNutritionalInfo;
   }
@@ -332,11 +340,20 @@ export class MenuItemService {
           }
         }
       },
-      relations: ['recipeIngredients']
+      relations: ['recipeIngredients', 'recipeIngredients.ingredient'] // Ensure ingredient is loaded to get companyId
     });
 
+    if (menuItems.length === 0) {
+      return; // No menu items to recalculate for this ingredient
+    }
+
+    // All menu items found here should belong to the same company
+    const companyId = menuItems[0].companyId;
+
     for (const menuItem of menuItems) {
-      await this.calculateAndCacheNutritionalInfo(menuItem.id);
+      // Fetch the full menuItem with relations
+      const fullMenuItem = await this.findOneForTenant(menuItem.id, companyId);
+      await this.calculateAndCacheNutritionalInfo(fullMenuItem);
     }
   }
 
