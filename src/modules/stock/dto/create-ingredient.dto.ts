@@ -80,5 +80,9 @@ export class CreateIngredientDto {
   isActive?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  isFresh?: boolean;
+
+  @IsOptional()
   nutritionalInfo?: NutritionalInfo;
 }
