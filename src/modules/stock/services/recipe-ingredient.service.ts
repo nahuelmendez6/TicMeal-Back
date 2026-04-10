@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  forwardRef,
+  Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -10,6 +12,7 @@ import { MenuItems } from '../entities/menu-items.entity';
 import { Ingredient } from '../entities/ingredient.entity';
 import { CreateRecipeIngredientDto } from '../dto/create-recipe-ingredient.dto';
 import { UpdateRecipeIngredientDto } from '../dto/update-recipe-ingredient.dto';
+import { MenuItemService } from './menu-item.service';
 
 @Injectable()
 export class RecipeIngredientService {
@@ -20,6 +23,8 @@ export class RecipeIngredientService {
     private readonly menuItemRepo: Repository<MenuItems>,
     @InjectRepository(Ingredient)
     private readonly ingredientRepo: Repository<Ingredient>,
+    @Inject(forwardRef(() => MenuItemService))
+    private readonly menuItemService: MenuItemService,
   ) {}
 
   /**
@@ -73,7 +78,19 @@ export class RecipeIngredientService {
       quantity,
     });
 
-    return this.recipeIngredientRepo.save(newRecipeIngredient);
+    const savedRecipeIngredient = await this.recipeIngredientRepo.save(
+      newRecipeIngredient,
+    );
+
+    // Recalculate nutritional info for the menu item
+    // Fetch the menu item again to ensure recipeIngredients are loaded
+    const fullMenuItem = await this.menuItemService.findOneForTenant(
+      menuItem.id,
+      companyId,
+    );
+    await this.menuItemService.calculateAndCacheNutritionalInfo(fullMenuItem);
+
+    return savedRecipeIngredient;
   }
 
   /**
@@ -120,7 +137,19 @@ export class RecipeIngredientService {
     }
 
     recipeIngredient.quantity = updateDto.quantity;
-    return this.recipeIngredientRepo.save(recipeIngredient);
+    const updatedRecipeIngredient = await this.recipeIngredientRepo.save(
+      recipeIngredient,
+    );
+
+    // Recalculate nutritional info for the menu item
+    // Fetch the menu item again to ensure recipeIngredients are loaded
+    const fullMenuItem = await this.menuItemService.findOneForTenant(
+      updatedRecipeIngredient.menuItem.id,
+      companyId,
+    );
+    await this.menuItemService.calculateAndCacheNutritionalInfo(fullMenuItem);
+
+    return updatedRecipeIngredient;
   }
 
   /**
@@ -130,15 +159,27 @@ export class RecipeIngredientService {
     id: number,
     companyId: number,
   ): Promise<void> {
-    const result = await this.recipeIngredientRepo.delete({
-      id,
-      menuItem: { companyId },
+    const recipeIngredient = await this.recipeIngredientRepo.findOne({
+      where: { id, menuItem: { companyId } },
+      relations: ['menuItem'],
     });
 
-    if (result.affected === 0) {
+    if (!recipeIngredient) {
       throw new NotFoundException(
         `El ingrediente de la receta con ID ${id} no fue encontrado en su empresa.`,
       );
     }
+
+    const menuItem = recipeIngredient.menuItem;
+    await this.recipeIngredientRepo.remove(recipeIngredient);
+
+    // Recalculate nutritional info for the menu item
+    // Fetch the menu item again to ensure recipeIngredients are loaded
+    const fullMenuItem = await this.menuItemService.findOneForTenant(
+      menuItem.id,
+      companyId,
+    );
+    await this.menuItemService.calculateAndCacheNutritionalInfo(fullMenuItem);
   }
 }
+

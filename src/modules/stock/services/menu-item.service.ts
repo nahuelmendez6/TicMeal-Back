@@ -93,7 +93,13 @@ export class MenuItemService {
         const savedRecipeIngredients = await queryRunner.manager.save(recipe);
         savedMenuItem.recipeIngredients = savedRecipeIngredients; // Populate the relation
       }
-      await queryRunner.manager.getRepository(MenuItems).reload(savedMenuItem); // Reload to ensure relations are loaded
+      // await queryRunner.manager.getRepository(MenuItems).reload(savedMenuItem); // Reload to ensure relations are loaded
+      const updatedSavedMenuItem = await queryRunner.manager.findOne(MenuItems, {
+        where: { id: savedMenuItem.id },
+        relations: ['recipeIngredients', 'recipeIngredients.ingredient', 'category'],
+      });
+      // Re-assign to ensure the variable used in calculateAndCacheNutritionalInfo is fresh
+      Object.assign(savedMenuItem, updatedSavedMenuItem);
 
       // Initial stock must now be added via an explicit stock movement, not on creation.
 
@@ -231,7 +237,12 @@ export class MenuItemService {
           menuItemToUpdate.recipeIngredients = []; // Clear if no recipe items
         }
       }
-      await queryRunner.manager.getRepository(MenuItems).reload(menuItemToUpdate); // Reload to ensure relations are loaded
+      // await queryRunner.manager.getRepository(MenuItems).reload(menuItemToUpdate); // Reload to ensure relations are loaded
+      const updatedMenuItem = await queryRunner.manager.findOne(MenuItems, {
+        where: { id: menuItemToUpdate.id },
+        relations: ['recipeIngredients', 'recipeIngredients.ingredient', 'category'],
+      });
+      Object.assign(menuItemToUpdate, updatedMenuItem);
 
       // The block that caused the error has been removed.
       // Stock adjustments must be done via explicit calls to StockService.
@@ -247,23 +258,26 @@ export class MenuItemService {
     }
   }
 
-  async calculateAndCacheNutritionalInfo(menuItem: MenuItems): Promise<NutritionalInfo | null> {
-  
-
-    if (!menuItem || menuItem.type !== MenuItemType.PRODUCTO_COMPUESTO) {
-      // Si no es un producto compuesto, no hay nada que calcular.
-      // Su información nutricional se gestiona manualmente.
+  async calculateAndCacheNutritionalInfo(
+    menuItem: MenuItems,
+  ): Promise<NutritionalInfo | null> {
+    if (!menuItem) {
+      return null;
+    }
+    // For non-composite items, nutritional info is managed directly.
+    if (menuItem.type !== MenuItemType.PRODUCTO_COMPUESTO) {
+      // The nutritionalInfo is received in the DTO and saved in the create/update methods.
+      // This function is only for calculation, so we just return the value.
       return menuItem.nutritionalInfo;
     }
-  
+
+    // For composite items, calculate from ingredients.
     if (!menuItem.recipeIngredients || menuItem.recipeIngredients.length === 0) {
-      // Si no tiene receta, la info es nula.
-      console.log(`[MenuItemService] No recipe ingredients found for MenuItem ${menuItem.id}. Setting nutritionalInfo to null.`);
+      // No recipe, no nutritional info to calculate.
       await this.menuItemRepo.update(menuItem.id, { nutritionalInfo: null });
       return null;
     }
-  
-    // Inicializamos el acumulador
+
     const totalNutritionalInfo: NutritionalInfo = {
       calories: 0,
       protein: 0,
@@ -273,61 +287,56 @@ export class MenuItemService {
       sodium: 0,
     };
 
-
     for (const recipeIngredient of menuItem.recipeIngredients) {
       const { ingredient, quantity } = recipeIngredient;
 
-      if (!ingredient || !ingredient.nutritionalInfo) {
+      if (!ingredient?.nutritionalInfo) {
         continue;
       }
 
-      let normalizedQuantity: number;
-      let divisor: number;
+      // Nutritional info for ingredients is per 100g/100ml, unless it's per UNIT.
+      const isUnitBased = ingredient.unit === IngredientUnit.UNIT;
+      const nutritionalInfoBase = isUnitBased ? 1 : 100;
 
-      if (ingredient.unit === IngredientUnit.UNIT) {
-        normalizedQuantity = quantity;
-        divisor = 1;
-      } else {
-        switch (ingredient.unit) {
-          case IngredientUnit.GRAMS:
-            normalizedQuantity = quantity;
-            break;
-          case IngredientUnit.KILOGRAMS:
-            normalizedQuantity = quantity * 1000;
-            break;
-          case IngredientUnit.MILLILITERS:
-            normalizedQuantity = quantity;
-            break;
-          case IngredientUnit.LITERS:
-            normalizedQuantity = quantity * 1000;
-            break;
-          default:
-            normalizedQuantity = quantity;
-        }
-        divisor = 100;
+      // Convert recipe quantity to a base unit (g or ml) for calculation.
+      let quantityInBaseUnit = quantity;
+      if (
+        ingredient.unit === IngredientUnit.KILOGRAMS ||
+        ingredient.unit === IngredientUnit.LITERS
+      ) {
+        quantityInBaseUnit *= 1000;
       }
 
-      const scale = normalizedQuantity / divisor;
+      const scale = quantityInBaseUnit / nutritionalInfoBase;
 
-      // --- Debugging logs for scaling ---
-      console.log(`Normalized Quantity: ${normalizedQuantity}`);
-      console.log(`Divisor: ${divisor}`);
-      console.log(`Scale: ${scale}`);
-      console.log(`Calculated calories contribution: ${(ingredient.nutritionalInfo.calories || 0) * scale}`);
-      // --- End Debugging logs ---
-
-      totalNutritionalInfo.calories += (ingredient.nutritionalInfo.calories || 0) * scale;
-      totalNutritionalInfo.protein += (ingredient.nutritionalInfo.protein || 0) * scale;
-      totalNutritionalInfo.carbohydrates += (ingredient.nutritionalInfo.carbohydrates || 0) * scale;
+      totalNutritionalInfo.calories +=
+        (ingredient.nutritionalInfo.calories || 0) * scale;
+      totalNutritionalInfo.protein +=
+        (ingredient.nutritionalInfo.protein || 0) * scale;
+      totalNutritionalInfo.carbohydrates +=
+        (ingredient.nutritionalInfo.carbohydrates || 0) * scale;
       totalNutritionalInfo.fat += (ingredient.nutritionalInfo.fat || 0) * scale;
-      totalNutritionalInfo.sugar += (ingredient.nutritionalInfo.sugar || 0) * scale;
-      totalNutritionalInfo.sodium += (ingredient.nutritionalInfo.sodium || 0) * scale;
-      console.log(`Total Nutritional Info after ${ingredient?.name}:`, totalNutritionalInfo); // Log after each ingredient
+      totalNutritionalInfo.sugar +=
+        (ingredient.nutritionalInfo.sugar || 0) * scale;
+      totalNutritionalInfo.sodium +=
+        (ingredient.nutritionalInfo.sodium || 0) * scale;
     }
-    // Guardamos el resultado calculado (caché) en el MenuItem
-    await this.menuItemRepo.update(menuItem.id, { nutritionalInfo: totalNutritionalInfo });
-  
-    return totalNutritionalInfo;
+
+    // Round all values to 2 decimal places
+    const roundedNutritionalInfo = {
+      calories: parseFloat(totalNutritionalInfo.calories.toFixed(2)),
+      protein: parseFloat(totalNutritionalInfo.protein.toFixed(2)),
+      carbohydrates: parseFloat(totalNutritionalInfo.carbohydrates.toFixed(2)),
+      fat: parseFloat(totalNutritionalInfo.fat.toFixed(2)),
+      sugar: parseFloat(totalNutritionalInfo.sugar.toFixed(2)),
+      sodium: parseFloat(totalNutritionalInfo.sodium.toFixed(2)),
+    };
+
+    await this.menuItemRepo.update(menuItem.id, {
+      nutritionalInfo: roundedNutritionalInfo,
+    });
+
+    return roundedNutritionalInfo;
   }
 
 

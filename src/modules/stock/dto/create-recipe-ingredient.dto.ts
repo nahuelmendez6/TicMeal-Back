@@ -1,16 +1,16 @@
-import { IsInt, IsNumber, IsPositive } from 'class-validator';
 
-/**
- * DTO para añadir un ingrediente a la receta de un MenuItem.
- */
+import { IsInt, IsNotEmpty, IsNumber } from 'class-validator';
+
 export class CreateRecipeIngredientDto {
-  @IsInt({ message: 'El ID del ítem de menú debe ser un número entero.' })
+  @IsInt()
+  @IsNotEmpty()
   menuItemId: number;
 
-  @IsInt({ message: 'El ID del ingrediente debe ser un número entero.' })
+  @IsInt()
+  @IsNotEmpty()
   ingredientId: number;
 
   @IsNumber()
-  @IsPositive({ message: 'La cantidad debe ser un número positivo.' })
+  @IsNotEmpty()
   quantity: number;
 }
