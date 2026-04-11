@@ -11,6 +11,11 @@ import { CreateMenuDto } from './dto/create-menu.dto';
 import { UpdateMenuDto } from './dto/update-menu.dto';
 import { AddMenuOptionDto } from './dto/add-menu-option.dto';
 
+/**
+ * Service responsible for managing menus and their associated days and options.
+ * It handles creation, retrieval, updates, and deletion of menu data,
+ * ensuring multi-tenancy by filtering operations based on companyId.
+ */
 @Injectable()
 export class MenusService {
   constructor(
@@ -25,6 +30,13 @@ export class MenusService {
     private readonly dataSource: DataSource,
   ) {}
 
+  /**
+   * Creates a new menu for a specific company.
+   *
+   * @param createMenuDto - Data transfer object for creating a menu.
+   * @param companyId - The ID of the company creating the menu.
+   * @returns A promise that resolves to the newly created Menu entity.
+   */
   async create(createMenuDto: CreateMenuDto, companyId: number): Promise<Menu> {
     const menu = this.menuRepository.create({
       ...createMenuDto,
@@ -33,10 +45,24 @@ export class MenusService {
     return this.menuRepository.save(menu);
   }
 
+  /**
+   * Retrieves all menus for a given company.
+   *
+   * @param companyId - The ID of the company.
+   * @returns A promise that resolves to an array of Menu entities.
+   */
   async findAll(companyId: number): Promise<Menu[]> {
     return this.menuRepository.find({ where: { companyId } });
   }
 
+  /**
+   * Retrieves a single menu by its ID for a specific company, including its days, options, and associated shifts.
+   *
+   * @param id - The ID of the menu to retrieve.
+   * @param companyId - The ID of the company.
+   * @returns A promise that resolves to the found Menu entity.
+   * @throws NotFoundException if the menu does not exist or does not belong to the company.
+   */
   async findOne(id: string, companyId: number): Promise<Menu> {
     const menu = await this.menuRepository.findOne({
       where: { id, companyId },
@@ -49,6 +75,13 @@ export class MenusService {
     return menu;
   }
 
+  /**
+   * Retrieves all published menus that are currently active for a specific company.
+   * These menus include their days, options, and associated shifts, ordered by start date.
+   *
+   * @param companyId - The ID of the company.
+   * @returns A promise that resolves to an array of published Menu entities.
+   */
   async findPublishedForUser(companyId: number): Promise<Menu[]> {
     const today = new Date();
     return this.menuRepository.find({
@@ -66,12 +99,32 @@ export class MenusService {
     });
   }
 
+  /**
+   * Updates an existing menu for a specific company.
+   *
+   * @param id - The ID of the menu to update.
+   * @param updateMenuDto - Data transfer object with the updated menu data.
+   * @param companyId - The ID of the company.
+   * @returns A promise that resolves to the updated Menu entity.
+   * @throws NotFoundException if the menu does not exist or does not belong to the company.
+   */
   async update(id: string, updateMenuDto: UpdateMenuDto, companyId: number): Promise<Menu> {
-    const menu = await this.findOne(id, companyId);
+    const menu = await this.findOne(id, companyId); // Ensures menu exists and belongs to tenant
     const updatedMenu = this.menuRepository.merge(menu, updateMenuDto);
     return this.menuRepository.save(updatedMenu);
   }
 
+  /**
+   * Adds a new menu option to a specific menu day for a company.
+   * This operation is transactional, ensuring data consistency.
+   * It will find an existing menu day or create a new one if it doesn't exist for the given date.
+   *
+   * @param addMenuOptionDto - Data transfer object containing the menu option details, including date and associated shift IDs.
+   * @param companyId - The ID of the company.
+   * @returns A promise that resolves to the newly created MenuOption entity.
+   * @throws BadRequestException if any shift IDs are invalid or do not belong to the company.
+   * @throws NotFoundException if no active menu is found for the specified date.
+   */
   async addOption(addMenuOptionDto: AddMenuOptionDto, companyId: number): Promise<MenuOption> {
     const { date, productId, shiftIds } = addMenuOptionDto;
 
@@ -81,6 +134,7 @@ export class MenusService {
       const menuDayRepo = manager.getRepository(MenuDay);
       const menuOptionRepo = manager.getRepository(MenuOption);
 
+      // Validate and retrieve shifts
       const shifts = await shiftRepo.find({
         where: { id: In(shiftIds), companyId },
       });
@@ -89,6 +143,7 @@ export class MenusService {
         throw new BadRequestException('One or more shifts are invalid or do not belong to this company.');
       }
 
+      // Find an active menu for the given date
       const menu = await menuRepo.findOne({
         where: {
           companyId,
@@ -101,6 +156,7 @@ export class MenusService {
         throw new NotFoundException(`No active menu found for date ${date}`);
       }
 
+      // Find or create the MenuDay
       let menuDay = await menuDayRepo.findOne({
         where: { date: new Date(date), menuId: menu.id, companyId },
       });
@@ -114,6 +170,7 @@ export class MenusService {
         await menuDayRepo.save(menuDay);
       }
 
+      // Create and save the new MenuOption
       const newOption = menuOptionRepo.create({
         productId,
         shifts,
@@ -125,8 +182,16 @@ export class MenusService {
     });
   }
 
+  /**
+   * Removes a menu by its ID for a specific company.
+   *
+   * @param id - The ID of the menu to remove.
+   * @param companyId - The ID of the company.
+   * @returns A promise that resolves when the menu is successfully removed.
+   * @throws NotFoundException if the menu does not exist or does not belong to the company.
+   */
   async remove(id: string, companyId: number): Promise<void> {
-    const menu = await this.findOne(id, companyId);
+    const menu = await this.findOne(id, companyId); // Ensures menu exists and belongs to tenant
     await this.menuRepository.remove(menu);
   }
 }
