@@ -1,6 +1,10 @@
-import { IsNotEmpty, IsString, IsUUID, IsArray, IsNumber, ArrayMinSize, ArrayNotEmpty } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, IsArray, IsNumber, ArrayMinSize, ArrayNotEmpty, IsDateString } from 'class-validator';
 
 export class AddMenuOptionDto {
+  @IsNotEmpty()
+  @IsDateString()
+  date: string;
+
   @IsNotEmpty()
   @IsUUID()
   productId: string;
