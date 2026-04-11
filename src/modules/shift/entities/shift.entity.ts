@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { BaseTenantEntity } from 'src/common/entities/base-tenant.entity';
 import { MenuItems } from 'src/modules/stock/entities/menu-items.entity';
+import { MenuOption } from 'src/modules/menus/entities/menu-option.entity';
 
 @Entity({ name: 'shifts' })
 export class Shift extends BaseTenantEntity {
@@ -35,4 +36,7 @@ export class Shift extends BaseTenantEntity {
     inverseJoinColumn: { name: 'menu_item_id', referencedColumnName: 'id' },
   })
   menuItems: MenuItems[];
+
+  @ManyToMany(() => MenuOption, (menuOption) => menuOption.shifts)
+  menuOptions: MenuOption[];
 }
