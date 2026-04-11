@@ -6,6 +6,7 @@ import { Menu } from './entities/menu.entity';
 import { MenuDay } from './entities/menu-day.entity';
 import { MenuOption } from './entities/menu-option.entity';
 import { ShiftModule } from '../shift/shift.module';
+import { MenusController } from './menus/menus.controller';
 
 @Module({
   imports: [
