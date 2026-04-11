@@ -34,4 +34,7 @@ export class Menu extends BaseTenantEntity {
 
   @Column({ type: 'enum', enum: MenuStatus, default: MenuStatus.DRAFT })
   status: MenuStatus;
+
+  @OneToMany(() => MenuDay, (menuDay) => menuDay.menu)
+  menuDays: MenuDay[];
 }
