@@ -1,5 +1,7 @@
-import { Entity, Column, PrimaryGeneratedColumn, Index } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, Index , OneToMany} from 'typeorm';
 import { BaseTenantEntity } from '../../../common/entities/base-tenant.entity';
+
+import { MenuDay } from './menu-day.entity';
 
 export enum MenuPeriodicity {
   DAILY = 'DAILY',

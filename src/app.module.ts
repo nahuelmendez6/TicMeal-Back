@@ -21,6 +21,7 @@ import { CostingModule } from './modules/costing/costing.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { ProductionModule } from './modules/production/production.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { MenusModule } from './modules/menus/menus.module';
 
 /**
  * Modulo raiz de la aplicación
@@ -51,6 +52,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     CostingModule,
     BookingsModule,
     ProductionModule,
+    MenusModule,
   ],
   providers: [TenantContextService, TenantInterceptor],
   exports: [TenantContextService, TenantInterceptor],
