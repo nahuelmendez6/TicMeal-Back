@@ -11,7 +11,7 @@ import {
 import { BaseTenantEntity } from 'src/common/entities/base-tenant.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { MenuOption } from 'src/modules/menus/entities/menu-option.entity';
-import { Timeslot } from 'src/modules/timeslots/entities/timeslot.entity';
+import { Timeslot } from './timeslot.entity';
 import { ApiProperty } from '@nestjs/swagger';
 
 export enum ReservationStatus {
