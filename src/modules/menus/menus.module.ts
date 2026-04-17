@@ -7,7 +7,7 @@ import { MenuDay } from './entities/menu-day.entity';
 import { MenuOption } from './entities/menu-option.entity';
 import { ShiftModule } from '../shift/shift.module';
 import { Shift } from '../shift/entities/shift.entity';
-import { MenusController } from './menus/menus.controller';
+import { MenusController } from './menus.controller';
 
 @Module({
   imports: [
