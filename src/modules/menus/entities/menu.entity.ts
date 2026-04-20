@@ -22,8 +22,8 @@ export class Menu extends BaseTenantEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ length: 255 })
-  name: string;
+  // @Column({ length: 255 })
+  // name: string;
 
   @Column({ type: 'date' })
   startDate: Date;

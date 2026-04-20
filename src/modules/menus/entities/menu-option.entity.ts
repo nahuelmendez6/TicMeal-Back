@@ -10,8 +10,7 @@ import {
 import { BaseTenantEntity } from '../../../common/entities/base-tenant.entity';
 import { MenuDay } from './menu-day.entity';
 import { Shift } from '../../shift/entities/shift.entity';
-// Assuming a Product entity exists in another module, e.g., 'src/modules/products/entities/product.entity.ts'
-// import { Product } from '../../products/entities/product.entity';
+import { MenuItems } from '../../stock/entities/menu-items.entity';
 
 @Entity('menu_options')
 @Index(['companyId', 'menuDayId'])
@@ -19,10 +18,13 @@ export class MenuOption extends BaseTenantEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // This will be a foreign key to a Product entity
-  // I'm assuming a 'products' module with a 'Product' entity exists or will be created.
+  @ManyToOne(() => MenuItems, (menuItem) => menuItem.menuOptions, {
+    nullable: false,
+  })
+  menuItem: MenuItems;
+
   @Column()
-  productId: string;
+  menuItemId: number;
 
   @ManyToOne(() => MenuDay, (menuDay) => menuDay.menuOptions, {
     onDelete: 'CASCADE',

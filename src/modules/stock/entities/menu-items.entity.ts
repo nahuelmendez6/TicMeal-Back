@@ -17,6 +17,7 @@ import { MenuItemLot } from './menu-item-lot.entity';
 import { MenuItemType } from '../enums/menuItemTypes';
 import { Observation } from 'src/modules/users/entities/observation.entity';
 import { NutritionalInfo } from '../dto/nutritional-info.dto';
+import { MenuOption } from 'src/modules/menus/entities/menu-option.entity';
 
 @Entity('menu_items')
 
@@ -102,4 +103,7 @@ export class MenuItems extends BaseTenantEntity {
     (observation: Observation) => observation.menuItems,
   )
   observations: Observation[];
+
+  @OneToMany(() => MenuOption, (menuOption) => menuOption.menuItem)
+  menuOptions: MenuOption[];
 }

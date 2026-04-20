@@ -6,8 +6,8 @@ export class AddMenuOptionDto {
   date: string;
 
   @IsNotEmpty()
-  @IsUUID()
-  productId: string;
+  @IsNumber()
+  menuItemId: number;
 
   @IsArray()
   @ArrayNotEmpty()

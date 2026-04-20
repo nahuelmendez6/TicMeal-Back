@@ -126,7 +126,7 @@ export class MenusService {
    * @throws NotFoundException if no active menu is found for the specified date.
    */
   async addOption(addMenuOptionDto: AddMenuOptionDto, companyId: number): Promise<MenuOption> {
-    const { date, productId, shiftIds } = addMenuOptionDto;
+    const { date, menuItemId, shiftIds } = addMenuOptionDto;
 
     return this.dataSource.transaction(async (manager) => {
       const shiftRepo = manager.getRepository(Shift);
@@ -172,7 +172,7 @@ export class MenusService {
 
       // Create and save the new MenuOption
       const newOption = menuOptionRepo.create({
-        productId,
+        menuItemId,
         shifts,
         menuDay,
         companyId,
