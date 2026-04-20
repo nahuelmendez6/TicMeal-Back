@@ -6,6 +6,9 @@ import { Menu, MenuStatus } from './entities/menu.entity';
 import { MenuDay } from './entities/menu-day.entity';
 import { MenuOption } from './entities/menu-option.entity';
 import { Shift } from '../shift/entities/shift.entity';
+import { User } from '../users/entities/user.entity';
+import { MenuItemService } from '../stock/services/menu-item.service';
+import { CompatibilityUtil } from 'src/common/utils/compatibility.util';
 
 import { CreateMenuDto } from './dto/create-menu.dto';
 import { UpdateMenuDto } from './dto/update-menu.dto';
@@ -27,6 +30,9 @@ export class MenusService {
     private readonly menuOptionRepository: Repository<MenuOption>,
     @InjectRepository(Shift)
     private readonly shiftRepository: Repository<Shift>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    private readonly menuItemService: MenuItemService,
     private readonly dataSource: DataSource,
   ) {}
 
