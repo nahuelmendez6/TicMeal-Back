@@ -223,6 +223,28 @@ export class MenusService {
   }
 
   /**
+   * Removes a specific menu option by its ID for a company.
+   *
+   * @param optionId - The ID of the menu option to remove.
+   * @param companyId - The ID of the company.
+   * @returns A promise that resolves when the option is successfully removed.
+   * @throws NotFoundException if the menu option does not exist or does not belong to the company.
+   */
+  async removeOption(optionId: string, companyId: number): Promise<void> {
+    const option = await this.menuOptionRepository.findOne({
+      where: { id: optionId, companyId },
+    });
+
+    if (!option) {
+      throw new NotFoundException(
+        `Menu option with ID "${optionId}" not found for this company.`,
+      );
+    }
+
+    await this.menuOptionRepository.remove(option);
+  }
+
+  /**
    * Removes a menu by its ID for a specific company.
    *
    * @param id - The ID of the menu to remove.

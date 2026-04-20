@@ -163,4 +163,23 @@ export class MenusController {
   addOption(@Body() addMenuOptionDto: AddMenuOptionDto, @Tenant() companyId: number) {
     return this.menusService.addOption(addMenuOptionDto, companyId);
   }
+
+  /**
+   * Removes a menu option from a menu planification.
+   *
+   * @param optionId - The ID of the menu option to delete.
+   * @param companyId - The ID of the company derived from the tenant context.
+   * @returns No content on successful deletion.
+   * @throws NotFoundException if the menu option does not exist or does not belong to the company.
+   */
+  @Delete('options/:optionId')
+  @ApiOperation({ summary: 'Remove a menu option', description: 'Deletes a specific menu option from its assigned day in a menu planification.' })
+  @ApiParam({ name: 'optionId', description: 'Unique identifier of the menu option to remove' })
+  @ApiResponse({ status: 204, description: 'The menu option has been successfully removed.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Tenant access denied.' })
+  @ApiResponse({ status: 404, description: 'Menu option not found for this company.' })
+  removeOption(@Param('optionId') optionId: string, @Tenant() companyId: number) {
+    return this.menusService.removeOption(optionId, companyId);
+  }
 }
