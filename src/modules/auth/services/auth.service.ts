@@ -251,14 +251,14 @@ export class AuthService {
 
     // 6. Buscar observaciones opcionales (solo del tenant del usuario)
     let observations: Observation[] = [];
-    if (userDto.observationsIds && userDto.observationsIds.length > 0) {
+    if (userDto.observationIds && userDto.observationIds.length > 0) {
       observations = await this.observationRepo.find({
         where: {
-          id: In(userDto.observationsIds),
+          id: In(userDto.observationIds),
         },
       });
 
-      if (observations.length !== userDto.observationsIds.length) {
+      if (observations.length !== userDto.observationIds.length) {
         throw new BadRequestException(
           'Una o más IDs de observaciones no existen',
         );
