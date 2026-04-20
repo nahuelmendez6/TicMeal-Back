@@ -77,6 +77,11 @@ export class CreateMenuItemDto {
 
   @IsOptional()
   @IsArray()
+  @IsInt({ each: true })
+  observationIds?: number[];
+
+  @IsOptional()
+  @IsArray()
   @ValidateNested({ each: true })
   @Type(() => RecipeIngredientDto)
   recipeIngredients?: RecipeIngredientDto[];
