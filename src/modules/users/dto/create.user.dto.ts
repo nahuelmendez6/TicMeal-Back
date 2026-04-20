@@ -46,5 +46,5 @@ export class CreateUserDto {
   @IsOptional()
   @IsArray()
   @IsInt({ each: true })
-  observationsIds: number[];
+  observationIds: number[];
 }
