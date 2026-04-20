@@ -6,19 +6,31 @@ import {
   JoinTable,
 } from 'typeorm';
 import { User } from './user.entity';
-import { BaseTenantEntity } from 'src/common/entities/base-tenant.entity';
+import { BaseEntity } from 'src/base.entity';
 import { Ingredient } from 'src/modules/stock/entities/ingredient.entity';
 import { MenuItems } from 'src/modules/stock/entities/menu-items.entity';
 
+export enum ObservationType {
+  ALLERGEN = 'allergen',
+  PREFERENCE = 'preference',
+}
+
 @Entity({ name: 'observations' })
-export class Observation extends BaseTenantEntity {
+export class Observation extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ length: 50 })
   name: string;
 
-  @Column({ name: 'icon_name', length: 50 })
+  @Column({
+    type: 'enum',
+    enum: ObservationType,
+    default: ObservationType.ALLERGEN,
+  })
+  type: ObservationType;
+
+  @Column({ name: 'icon_name', length: 50, nullable: true })
   iconName: string;
 
   @ManyToMany('User', (user: User) => user.observations)

@@ -44,6 +44,7 @@ export class MenuItemService {
     const {
       recipeIngredients: recipeDto,
       categoryId,
+      observationIds,
       // stock is no longer managed here
       ...menuItemData
     } = createDto;
@@ -80,6 +81,14 @@ export class MenuItemService {
         companyId,
         category: categoryId ? { id: categoryId } : null,
       });
+
+      if (observationIds && observationIds.length > 0) {
+        const observations = await queryRunner.manager.findBy(Observation, {
+          id: In(observationIds),
+        });
+        newMenuItem.observations = observations;
+      }
+
       const savedMenuItem = await queryRunner.manager.save(newMenuItem);
 
       if (recipeDto && recipeDto.length > 0) {
@@ -96,7 +105,12 @@ export class MenuItemService {
       // await queryRunner.manager.getRepository(MenuItems).reload(savedMenuItem); // Reload to ensure relations are loaded
       const updatedSavedMenuItem = await queryRunner.manager.findOne(MenuItems, {
         where: { id: savedMenuItem.id },
-        relations: ['recipeIngredients', 'recipeIngredients.ingredient', 'category'],
+        relations: [
+          'recipeIngredients',
+          'recipeIngredients.ingredient',
+          'category',
+          'observations',
+        ],
       });
       // Re-assign to ensure the variable used in calculateAndCacheNutritionalInfo is fresh
       Object.assign(savedMenuItem, updatedSavedMenuItem);
@@ -126,6 +140,7 @@ export class MenuItemService {
         'recipeIngredients',
         'recipeIngredients.ingredient',
         'lots', // Eagerly load lots
+        'observations',
       ],
       order: { name: 'ASC' },
     });
@@ -159,6 +174,7 @@ export class MenuItemService {
         'recipeIngredients',
         'recipeIngredients.ingredient',
         'lots',
+        'observations',
       ],
     });
 
@@ -189,6 +205,7 @@ export class MenuItemService {
     try {
       const menuItemToUpdate = await queryRunner.manager.findOne(MenuItems, {
         where: { id, companyId },
+        relations: ['observations'],
       });
 
       if (!menuItemToUpdate) {
@@ -198,6 +215,7 @@ export class MenuItemService {
       const {
         recipeIngredients: recipeDto,
         categoryId,
+        observationIds,
         // stock is no longer managed here
         ...menuItemData
       } = updateDto;
@@ -215,6 +233,13 @@ export class MenuItemService {
         menuItemToUpdate.category = categoryId
           ? ({ id: categoryId } as Category)
           : null;
+      }
+
+      if (observationIds) {
+        const observations = await queryRunner.manager.findBy(Observation, {
+          id: In(observationIds),
+        });
+        menuItemToUpdate.observations = observations;
       }
 
       await queryRunner.manager.save(menuItemToUpdate);

@@ -25,7 +25,7 @@ export class ObservationController {
   constructor(private readonly observationService: ObservationService) {}
 
   @Get()
-  async list(@Tenant() tenantId: number | undefined, @Req() req: Request) {
+  async list(@Req() req: Request) {
     return this.observationService.getAllObservations();
   }
 }

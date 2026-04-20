@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository, In } from 'typeorm';
 import { Ingredient } from '../entities/ingredient.entity';
 import { CreateIngredientDto } from '../dto/create-ingredient.dto';
 import { IngredientCategory } from '../entities/ingredient-category.entity';
@@ -9,6 +9,7 @@ import { IngredientCategoryService } from './ingredient-category.service';
 import { StockService } from './stock.service';
 import { MovementType } from '../enums/enums';
 import { MenuItemService } from './menu-item.service';
+import { Observation } from 'src/modules/users/entities/observation.entity';
 
 @Injectable()
 export class IngredientService {
@@ -29,6 +30,7 @@ export class IngredientService {
   ): Promise<Ingredient> {
     const {
       categoryId,
+      observationIds,
       // quantityInStock is no longer managed here
       ...ingredientData
     } = createDto;
@@ -50,6 +52,14 @@ export class IngredientService {
         companyId: companyId,
         category: categoryId ? { id: categoryId } : null,
       });
+
+      if (observationIds && observationIds.length > 0) {
+        const observations = await queryRunner.manager.findBy(Observation, {
+          id: In(observationIds),
+        });
+        newIngredient.observations = observations;
+      }
+
       const savedIngredient = await queryRunner.manager.save(newIngredient);
 
       // Initial stock must now be added via an explicit stock movement, not on creation.
@@ -67,7 +77,7 @@ export class IngredientService {
   async findAllForTenant(companyId: number): Promise<Ingredient[]> {
     const ingredients = await this.ingredientRepo.find({
       where: { companyId },
-      relations: ['category', 'lots'],
+      relations: ['category', 'lots', 'observations'],
       order: { name: 'ASC' },
     });
 
@@ -84,7 +94,7 @@ export class IngredientService {
   async findOneForTenant(id: number, companyId: number): Promise<Ingredient> {
     const ingredient = await this.ingredientRepo.findOne({
       where: { id, companyId },
-      relations: ['category', 'lots'],
+      relations: ['category', 'lots', 'observations'],
     });
 
     if (!ingredient) {
@@ -114,6 +124,7 @@ export class IngredientService {
     try {
       const ingredientToUpdate = await queryRunner.manager.findOne(Ingredient, {
         where: { id, companyId },
+        relations: ['observations'],
       });
 
       if (!ingredientToUpdate) {
@@ -123,6 +134,7 @@ export class IngredientService {
       const {
         // quantityInStock is no longer managed here
         categoryId,
+        observationIds,
         ...updateData
       } = updateDto;
 
@@ -142,6 +154,14 @@ export class IngredientService {
           ingredientToUpdate.category = null;
         }
       }
+
+      if (observationIds) {
+        const observations = await queryRunner.manager.findBy(Observation, {
+          id: In(observationIds),
+        });
+        ingredientToUpdate.observations = observations;
+      }
+
       await queryRunner.manager.save(ingredientToUpdate);
 
       // The block that caused the error has been removed.

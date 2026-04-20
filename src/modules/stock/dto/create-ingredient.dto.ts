@@ -11,6 +11,8 @@ import {
   IsObject,
   Min,
   Max,
+  IsArray,
+  IsInt,
 } from 'class-validator';
 import { IngredientUnit, IngredientCostType } from '../enums/enums';
 import { NutritionalInfo } from './nutritional-info.dto';
@@ -82,6 +84,11 @@ export class CreateIngredientDto {
   @IsOptional()
   @IsBoolean()
   isFresh?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  observationIds?: number[];
 
   @IsOptional()
   nutritionalInfo?: NutritionalInfo;

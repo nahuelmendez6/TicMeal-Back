@@ -70,12 +70,10 @@ describe('BookingsController (e2e)', () => {
     allergicObservation = await connection.manager.save(Observation, {
       name: 'Allergic to Peanuts',
       iconName: 'peanut',
-      companyId: company.id,
     });
     nonAllergicObservation = await connection.manager.save(Observation, {
       name: 'Vegetarian',
       iconName: 'leaf',
-      companyId: company.id,
     });
 
     // 5. Create Ingredient and MenuItem
