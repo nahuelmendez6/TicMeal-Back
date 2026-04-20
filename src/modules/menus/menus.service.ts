@@ -89,13 +89,18 @@ export class MenusService {
   /**
    * Retrieves all published menus that are currently active for a specific company.
    * These menus include their days, options, and associated shifts, ordered by start date.
+   * For the provided userId, it calculates compatibility flags for each option.
    *
    * @param companyId - The ID of the company.
-   * @returns A promise that resolves to an array of published Menu entities.
+   * @param userId - Optional ID of the user to calculate compatibility for.
+   * @returns A promise that resolves to an array of published Menu entities with compatibility info.
    */
-  async findPublishedForUser(companyId: number): Promise<Menu[]> {
+  async findPublishedForUser(
+    companyId: number,
+    userId?: number,
+  ): Promise<any[]> {
     const today = new Date();
-    return this.menuRepository.find({
+    const menus = await this.menuRepository.find({
       where: {
         companyId,
         status: MenuStatus.PUBLISHED,
@@ -107,12 +112,47 @@ export class MenusService {
         'menuDays.menuOptions',
         'menuDays.menuOptions.shifts',
         'menuDays.menuOptions.menuItem',
+        'menuDays.menuOptions.menuItem.observations',
+        'menuDays.menuOptions.menuItem.recipeIngredients',
+        'menuDays.menuOptions.menuItem.recipeIngredients.ingredient',
+        'menuDays.menuOptions.menuItem.recipeIngredients.ingredient.observations',
       ],
       order: {
         startDate: 'ASC',
         menuDays: { date: 'ASC' },
       },
     });
+
+    if (!userId) return menus;
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId, companyId },
+      relations: ['observations'],
+    });
+
+    if (!user) return menus;
+
+    // Inject compatibility flags
+    return menus.map((menu) => ({
+      ...menu,
+      menuDays: menu.menuDays.map((day) => ({
+        ...day,
+        menuOptions: day.menuOptions.map((option) => {
+          const aggregatedObs = this.menuItemService.getAggregatedObservations(
+            option.menuItem,
+          );
+          const compatibility = CompatibilityUtil.evaluate(
+            user.observations || [],
+            aggregatedObs,
+          );
+          return {
+            ...option,
+            isCompatible: compatibility.isCompatible,
+            conflictingObservations: compatibility.conflicts,
+          };
+        }),
+      })),
+    }));
   }
 
   /**
@@ -120,13 +160,15 @@ export class MenusService {
    *
    * @param menuId - The ID of the menu.
    * @param companyId - The ID of the company.
-   * @returns A promise that resolves to an array of MenuDay entities.
+   * @param userId - Optional ID of the user to calculate compatibility for.
+   * @returns A promise that resolves to an array of MenuDay entities with compatibility info.
    * @throws NotFoundException if the menu does not exist or does not belong to the company.
    */
   async getMenuOptionsByDay(
     menuId: string,
     companyId: number,
-  ): Promise<MenuDay[]> {
+    userId?: number,
+  ): Promise<any[]> {
     // Ensure the menu exists and belongs to the company
     const menu = await this.menuRepository.findOne({
       where: { id: menuId, companyId },
@@ -138,11 +180,46 @@ export class MenusService {
       );
     }
 
-    return this.menuDayRepository.find({
+    const days = await this.menuDayRepository.find({
       where: { menuId, companyId },
-      relations: ['menuOptions', 'menuOptions.menuItem', 'menuOptions.shifts'],
+      relations: [
+        'menuOptions',
+        'menuOptions.menuItem',
+        'menuOptions.menuItem.observations',
+        'menuOptions.menuItem.recipeIngredients',
+        'menuOptions.menuItem.recipeIngredients.ingredient',
+        'menuOptions.menuItem.recipeIngredients.ingredient.observations',
+        'menuOptions.shifts',
+      ],
       order: { date: 'ASC' },
     });
+
+    if (!userId) return days;
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId, companyId },
+      relations: ['observations'],
+    });
+
+    if (!user) return days;
+
+    return days.map((day) => ({
+      ...day,
+      menuOptions: day.menuOptions.map((option) => {
+        const aggregatedObs = this.menuItemService.getAggregatedObservations(
+          option.menuItem,
+        );
+        const compatibility = CompatibilityUtil.evaluate(
+          user.observations || [],
+          aggregatedObs,
+        );
+        return {
+          ...option,
+          isCompatible: compatibility.isCompatible,
+          conflictingObservations: compatibility.conflicts,
+        };
+      }),
+    }));
   }
 
   /**
