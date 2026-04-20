@@ -7,6 +7,8 @@ import { MealShift } from 'src/modules/stock/entities/meal-shift.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { Observation } from 'src/modules/users/entities/observation.entity';
 import { TenantAwareRepository } from 'src/common/repository/tenant-aware.repository';
+import { CompatibilityUtil } from 'src/common/utils/compatibility.util';
+import { MenuItemService } from 'src/modules/stock/services/menu-item.service';
 
 @Injectable()
 export class BookingsService {
@@ -19,6 +21,7 @@ export class BookingsService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Observation)
     private readonly observationRepository: Repository<Observation>,
+    private readonly menuItemService: MenuItemService,
   ) {}
 
   async createBooking(
@@ -33,8 +36,13 @@ export class BookingsService {
       relations: {
         menuItem: {
           observations: true,
+          recipeIngredients: {
+            ingredient: {
+              observations: true,
+            },
+          },
         },
-      }, // Load menuItem and its observations
+      }, // Load menuItem and its aggregated observations context
     });
 
     if (!mealShift) {
@@ -56,19 +64,20 @@ export class BookingsService {
       throw new NotFoundException(`User with ID ${userId} not found.`);
     }
 
-    // 3. Compare observations for conflicts
-    const userObservationIds = user.observations.map((obs) => obs.id);
-    const menuItemObservationIds = mealShift.menuItem.observations.map(
-      (obs) => obs.id,
+    // 3. Compare observations for conflicts using CompatibilityUtil
+    const aggregatedObs = this.menuItemService.getAggregatedObservations(
+      mealShift.menuItem,
+    );
+    
+    const compatibility = CompatibilityUtil.evaluate(
+      user.observations || [],
+      aggregatedObs,
     );
 
-    const conflictingObservations = menuItemObservationIds.filter((id) =>
-      userObservationIds.includes(id),
-    );
-
-    if (conflictingObservations.length > 0) {
+    if (!compatibility.isCompatible) {
+      const conflictNames = compatibility.conflicts.map((o) => o.name).join(', ');
       throw new BadRequestException(
-        `Booking conflict: User has observations that conflict with the menu item. Conflicting observation IDs: ${conflictingObservations.join(', ')}`,
+        `Booking conflict: User has dietary restrictions or preference mismatches: ${conflictNames}`,
       );
     }
 
