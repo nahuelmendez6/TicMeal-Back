@@ -51,7 +51,7 @@ export class UsersService {
       );
     }
 
-    const { observationsIds, ...userDto } = dto;
+    const { observationIds, ...userDto } = dto;
 
     const partial: DeepPartial<User> = {
       ...userDto,
@@ -67,9 +67,9 @@ export class UsersService {
       if (companyRef) user.company = companyRef;
     }
 
-    if (observationsIds && observationsIds.length > 0) {
+    if (observationIds && observationIds.length > 0) {
       const observations = await this.observationRepo.findBy({
-        id: In(observationsIds),
+        id: In(observationIds),
       });
       user.observations = observations;
     }
