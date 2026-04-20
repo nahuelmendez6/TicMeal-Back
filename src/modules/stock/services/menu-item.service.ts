@@ -173,6 +173,7 @@ export class MenuItemService {
         'category',
         'recipeIngredients',
         'recipeIngredients.ingredient',
+        'recipeIngredients.ingredient.observations',
         'lots',
         'observations',
       ],
@@ -190,6 +191,22 @@ export class MenuItemService {
       : 0;
 
     return menuItem;
+  }
+
+  /**
+   * Combines direct observations of a menu item with the observations of all its ingredients.
+   * This provides a complete picture of allergens/preferences for the final dish.
+   */
+  getAggregatedObservations(menuItem: MenuItems): Observation[] {
+    const directObservations = menuItem.observations || [];
+    const ingredientObservations = (menuItem.recipeIngredients || [])
+      .flatMap((ri) => ri.ingredient?.observations || []);
+
+    // Unique by ID
+    const allObs = [...directObservations, ...ingredientObservations];
+    const uniqueObs = Array.from(new Map(allObs.map((o) => [o.id, o])).values());
+    
+    return uniqueObs;
   }
 
   async update(
