@@ -110,13 +110,13 @@ export class UsersService {
       dto.password = await bcrypt.hash(dto.password, salt);
     }
 
-    const { observationsIds, ...userDto } = dto;
+    const { observationIds, ...userDto } = dto;
 
     // Actualizar observaciones si se proveen los IDs
-    if (observationsIds !== undefined) {
-      if (observationsIds.length > 0) {
+    if (observationIds !== undefined) {
+      if (observationIds.length > 0) {
         const observations = await this.observationRepo.findBy({
-          id: In(observationsIds),
+          id: In(observationIds),
         });
         user.observations = observations;
       } else {
