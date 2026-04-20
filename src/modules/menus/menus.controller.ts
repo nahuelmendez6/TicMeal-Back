@@ -89,6 +89,21 @@ export class MenusController {
     return this.menusService.findOne(id, companyId);
   }
 
+  @Get(':id/options')
+  @ApiOperation({
+    summary: 'Get all menu options by day for a menu',
+    description:
+      'Retrieves all menu days and their associated options (menu items and shifts) for a specific menu identified by its ID.',
+  })
+  @ApiParam({ name: 'id', description: 'Unique identifier of the menu' })
+  @ApiResponse({ status: 200, description: 'List of menu days with options.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Tenant access denied.' })
+  @ApiResponse({ status: 404, description: 'Menu not found for this company.' })
+  getMenuOptionsByDay(@Param('id') id: string, @Tenant() companyId: number) {
+    return this.menusService.getMenuOptionsByDay(id, companyId);
+  }
+
   /**
    * Updates an existing menu identified by its ID for the current company.
    *

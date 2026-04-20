@@ -6,6 +6,10 @@ export class AddMenuOptionDto {
   date: string;
 
   @IsNotEmpty()
+  @IsUUID()
+  menuId: string;
+
+  @IsNotEmpty()
   @IsNumber()
   menuItemId: number;
 

@@ -66,7 +66,12 @@ export class MenusService {
   async findOne(id: string, companyId: number): Promise<Menu> {
     const menu = await this.menuRepository.findOne({
       where: { id, companyId },
-      relations: ['menuDays', 'menuDays.menuOptions', 'menuDays.menuOptions.shifts'],
+      relations: [
+        'menuDays',
+        'menuDays.menuOptions',
+        'menuDays.menuOptions.shifts',
+        'menuDays.menuOptions.menuItem',
+      ],
     });
 
     if (!menu) {
@@ -91,11 +96,46 @@ export class MenusService {
         startDate: LessThanOrEqual(today),
         endDate: MoreThanOrEqual(today),
       },
-      relations: ['menuDays', 'menuDays.menuOptions', 'menuDays.menuOptions.shifts'],
+      relations: [
+        'menuDays',
+        'menuDays.menuOptions',
+        'menuDays.menuOptions.shifts',
+        'menuDays.menuOptions.menuItem',
+      ],
       order: {
         startDate: 'ASC',
         menuDays: { date: 'ASC' },
       },
+    });
+  }
+
+  /**
+   * Retrieves all menu days and their associated options for a specific menu.
+   *
+   * @param menuId - The ID of the menu.
+   * @param companyId - The ID of the company.
+   * @returns A promise that resolves to an array of MenuDay entities.
+   * @throws NotFoundException if the menu does not exist or does not belong to the company.
+   */
+  async getMenuOptionsByDay(
+    menuId: string,
+    companyId: number,
+  ): Promise<MenuDay[]> {
+    // Ensure the menu exists and belongs to the company
+    const menu = await this.menuRepository.findOne({
+      where: { id: menuId, companyId },
+    });
+
+    if (!menu) {
+      throw new NotFoundException(
+        `Menu with ID "${menuId}" not found for this company.`,
+      );
+    }
+
+    return this.menuDayRepository.find({
+      where: { menuId, companyId },
+      relations: ['menuOptions', 'menuOptions.menuItem', 'menuOptions.shifts'],
+      order: { date: 'ASC' },
     });
   }
 
