@@ -10,7 +10,7 @@ import { StockService } from './stock.service';
 import { MovementType } from '../enums/enums';
 import { MenuItemService } from './menu-item.service';
 import { Observation } from 'src/modules/users/entities/observation.entity';
-
+import { RecipeIngredient } from '../entities/recipe-ingredient.entity';
 @Injectable()
 export class IngredientService {
   constructor(

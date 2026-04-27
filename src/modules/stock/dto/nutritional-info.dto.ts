@@ -1,31 +1,33 @@
 import { IsNumber, IsOptional, IsPositive, Min } from 'class-validator';
 
-// src/modules/stock/dto/nutritional-info.dto.ts
 export class NutritionalInfo {
+  @IsOptional() // Crucial: Permite que el valor sea null o undefined
   @IsNumber()
   @IsPositive()
-  calories: number; // por 100g o por unidad base
-
-  @IsNumber()
-  @Min(0)
-  protein: number; // gramos
-
-  @IsNumber()
-  @Min(0)
-  carbohydrates: number; // gramos
-
-  @IsNumber()
-  @Min(0)
-  fat: number; // gramos
+  calories: number | null;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  sugar?: number; // gramos
+  protein: number | null;
 
   @IsOptional()
   @IsNumber()
   @Min(0)
-  sodium?: number; // miligramos
-  // ... otros nutrientes que necesites
+  carbohydrates: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  fat: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  sugar?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  sodium?: number | null;
 }
