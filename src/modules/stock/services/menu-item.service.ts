@@ -6,7 +6,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { MenuItems } from '../entities/menu-items.entity';
 import { Category } from '../entities/category.entity';
 import { CreateMenuItemDto } from '../dto/create-menu-item-dto';
@@ -20,6 +20,7 @@ import { MealShiftService } from './meal-shift.service';
 import { StockService } from './stock.service';
 import { NutritionalInfo } from '../dto/nutritional-info.dto';
 import { IngredientUnit } from '../enums/enums';
+import { Observation } from 'src/modules/users/entities/observation.entity';
 
 @Injectable()
 export class MenuItemService {
@@ -102,12 +103,13 @@ export class MenuItemService {
         const savedRecipeIngredients = await queryRunner.manager.save(recipe);
         savedMenuItem.recipeIngredients = savedRecipeIngredients; // Populate the relation
       }
-      // await queryRunner.manager.getRepository(MenuItems).reload(savedMenuItem); // Reload to ensure relations are loaded
+      
       const updatedSavedMenuItem = await queryRunner.manager.findOne(MenuItems, {
         where: { id: savedMenuItem.id },
         relations: [
           'recipeIngredients',
           'recipeIngredients.ingredient',
+          'recipeIngredients.ingredient.observations',
           'category',
           'observations',
         ],
@@ -115,11 +117,17 @@ export class MenuItemService {
       // Re-assign to ensure the variable used in calculateAndCacheNutritionalInfo is fresh
       Object.assign(savedMenuItem, updatedSavedMenuItem);
 
+      // If it's a composite product, sync observations from ingredients
+      if (savedMenuItem.type === MenuItemType.PRODUCTO_COMPUESTO) {
+        await this.syncObservations(savedMenuItem.id, companyId, queryRunner.manager);
+      }
+
       // Initial stock must now be added via an explicit stock movement, not on creation.
 
       await queryRunner.commitTransaction();
-      await this.calculateAndCacheNutritionalInfo(savedMenuItem); // Pass the fully loaded object
-      return this.findOneForTenant(savedMenuItem.id, companyId);
+      const finalMenuItem = await this.findOneForTenant(savedMenuItem.id, companyId);
+      await this.calculateAndCacheNutritionalInfo(finalMenuItem); // Pass the fully loaded object
+      return finalMenuItem;
     } catch (err) {
       await queryRunner.rollbackTransaction();
       throw err;
@@ -139,6 +147,7 @@ export class MenuItemService {
         'category',
         'recipeIngredients',
         'recipeIngredients.ingredient',
+        'recipeIngredients.ingredient.observations',
         'lots', // Eagerly load lots
         'observations',
       ],
@@ -150,6 +159,9 @@ export class MenuItemService {
       item.stock = item.lots
         ? item.lots.reduce((sum, lot) => sum + lot.quantity, 0)
         : 0;
+
+      // Populate aggregated observations
+      item.observations = this.getAggregatedObservations(item);
 
       let isProduced = item.type !== MenuItemType.PRODUCTO_COMPUESTO;
       if (shiftId && date && item.type === MenuItemType.PRODUCTO_COMPUESTO) {
@@ -190,7 +202,55 @@ export class MenuItemService {
       ? menuItem.lots.reduce((sum, lot) => sum + lot.quantity, 0)
       : 0;
 
+    // Populate aggregated observations
+    menuItem.observations = this.getAggregatedObservations(menuItem);
+
     return menuItem;
+  }
+
+  /**
+   * Synchronizes a menu item's observations with those of its ingredients.
+   * Only applicable for composite items.
+   */
+  async syncObservations(
+    menuItemId: number,
+    companyId: number,
+    manager?: any,
+  ): Promise<void> {
+    const managerToUse = manager || this.menuItemRepo.manager;
+    const menuItem = await managerToUse.findOne(MenuItems, {
+      where: { id: menuItemId, companyId },
+      relations: [
+        'recipeIngredients',
+        'recipeIngredients.ingredient',
+        'recipeIngredients.ingredient.observations',
+        'observations',
+      ],
+    });
+
+    if (!menuItem || menuItem.type !== MenuItemType.PRODUCTO_COMPUESTO) {
+      return;
+    }
+
+    const aggregatedObs = this.getAggregatedObservations(menuItem);
+    const targetIds = [...new Set(aggregatedObs.map((o) => o.id))];
+    const currentIds = (menuItem.observations || []).map((o) => o.id);
+
+    const toAdd = targetIds.filter((id) => !currentIds.includes(id));
+    const toRemove = currentIds.filter((id) => !targetIds.includes(id));
+
+    const relation = managerToUse
+      .createQueryBuilder()
+      .relation(MenuItems, 'observations')
+      .of(menuItemId);
+
+    if (toRemove.length > 0) {
+      await relation.remove(toRemove);
+    }
+
+    if (toAdd.length > 0) {
+      await relation.add(toAdd);
+    }
   }
 
   /**
@@ -282,16 +342,28 @@ export class MenuItemService {
       // await queryRunner.manager.getRepository(MenuItems).reload(menuItemToUpdate); // Reload to ensure relations are loaded
       const updatedMenuItem = await queryRunner.manager.findOne(MenuItems, {
         where: { id: menuItemToUpdate.id },
-        relations: ['recipeIngredients', 'recipeIngredients.ingredient', 'category'],
+        relations: [
+          'recipeIngredients',
+          'recipeIngredients.ingredient',
+          'recipeIngredients.ingredient.observations',
+          'category',
+          'observations',
+        ],
       });
       Object.assign(menuItemToUpdate, updatedMenuItem);
+
+      // If it's a composite product, sync observations from ingredients
+      if (menuItemToUpdate.type === MenuItemType.PRODUCTO_COMPUESTO) {
+        await this.syncObservations(menuItemToUpdate.id, companyId, queryRunner.manager);
+      }
 
       // The block that caused the error has been removed.
       // Stock adjustments must be done via explicit calls to StockService.
 
       await queryRunner.commitTransaction();
-      await this.calculateAndCacheNutritionalInfo(menuItemToUpdate); // Pass the fully loaded object
-      return this.findOneForTenant(menuItemToUpdate.id, companyId);
+      const finalMenuItem = await this.findOneForTenant(menuItemToUpdate.id, companyId);
+      await this.calculateAndCacheNutritionalInfo(finalMenuItem); // Pass the fully loaded object
+      return finalMenuItem;
     } catch (err) {
       await queryRunner.rollbackTransaction();
       throw err;

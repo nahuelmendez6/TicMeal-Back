@@ -89,6 +89,7 @@ export class RecipeIngredientService {
       companyId,
     );
     await this.menuItemService.calculateAndCacheNutritionalInfo(fullMenuItem);
+    await this.menuItemService.syncObservations(menuItem.id, companyId);
 
     return savedRecipeIngredient;
   }
@@ -148,6 +149,7 @@ export class RecipeIngredientService {
       companyId,
     );
     await this.menuItemService.calculateAndCacheNutritionalInfo(fullMenuItem);
+    await this.menuItemService.syncObservations(fullMenuItem.id, companyId);
 
     return updatedRecipeIngredient;
   }
@@ -180,6 +182,7 @@ export class RecipeIngredientService {
       companyId,
     );
     await this.menuItemService.calculateAndCacheNutritionalInfo(fullMenuItem);
+    await this.menuItemService.syncObservations(menuItem.id, companyId);
   }
 }
 

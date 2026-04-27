@@ -164,6 +164,17 @@ export class IngredientService {
 
       await queryRunner.manager.save(ingredientToUpdate);
 
+      // Trigger sync for all related menu items if observations changed
+      if (observationIds) {
+        const relatedMenuItems = await queryRunner.manager.find(RecipeIngredient, {
+          where: { ingredient: { id } },
+          relations: ['menuItem'],
+        });
+        for (const ri of relatedMenuItems) {
+          await this.menuItemService.syncObservations(ri.menuItem.id, companyId, queryRunner.manager);
+        }
+      }
+
       // The block that caused the error has been removed.
       // Stock adjustments must be done via explicit calls to StockService.
 
