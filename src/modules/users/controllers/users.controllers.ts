@@ -25,7 +25,19 @@ import type { Request } from 'express';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly invitationsService: InvitationsService,
+  ) {}
+
+  @Roles('company_admin', 'super_admin')
+  @Post('invitations')
+  async createInvitation(
+    @Body() dto: CreateInvitationDto,
+    @Tenant() tenantId: number,
+  ) {
+    return this.invitationsService.createInvitation(dto.email, tenantId);
+  }
 
   @Roles('company_admin', 'super_admin')
   @Post('create')

@@ -5,8 +5,10 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { UsersService } from 'src/modules/users/services/user.service';
+import { InvitationsService } from 'src/modules/users/services/invitations.service';
 import { JwtService } from '@nestjs/jwt';
 import { CreateUserDto } from 'src/modules/users/dto/create.user.dto';
+import { RegisterInvitationDto } from '../dto/register-invitation.dto';
 import { CreateCompanyDto } from 'src/modules/companies/dto/create.company.dto';
 import { Company } from 'src/modules/companies/entities/company.entity';
 import { User } from 'src/modules/users/entities/user.entity';
@@ -22,6 +24,7 @@ import { In } from 'typeorm';
 export class AuthService {
   constructor(
     private readonly userService: UsersService,
+    private readonly invitationsService: InvitationsService,
     private readonly jwtService: JwtService,
     @InjectRepository(Company)
     private readonly companyRepo: Repository<Company>,
@@ -32,6 +35,58 @@ export class AuthService {
     private readonly dataSource: DataSource,
     private readonly mailService: MailService,
   ) {}
+
+  async registerWithInvitation(dto: RegisterInvitationDto) {
+    // 1. Validar invitación
+    const invitation = await this.invitationsService.validateToken(dto.token);
+
+    // 2. Asegurar que el email sea único
+    await this.ensureEmailIsUnique(invitation.email);
+
+    // 3. Crear usuario (diner)
+    const salt = await bcrypt.genSalt();
+    const passwordHash = await bcrypt.hash(dto.password, salt);
+
+    const company = await this.getCompanyOrThrow(invitation.companyId);
+
+    // Generar PIN y hash (los diners lo usan para terminales táctiles si aplica)
+    const pin = this.generatePin();
+    const pinHash = await this.hashPin(pin);
+
+    // Buscar observaciones
+    let observations: Observation[] = [];
+    if (dto.observationIds && dto.observationIds.length > 0) {
+      observations = await this.observationRepo.findBy({
+        id: In(dto.observationIds),
+      });
+    }
+
+    const newUser = this.userRepo.create({
+      email: invitation.email,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      password: passwordHash,
+      role: UserRole.DINER,
+      company,
+      pinHash,
+      observations,
+      isEmailVerified: true, // Se considera verificado al usar el link de invitación por email
+      isFirstLogin: false, // Ya están configurando su cuenta ahora
+    });
+
+    const savedUser = await this.userRepo.save(newUser);
+
+    // 4. Marcar invitación como usada
+    await this.invitationsService.markAsUsed(invitation.id);
+
+    return {
+      message: 'Usuario registrado exitosamente',
+      user: {
+        id: savedUser.id,
+        email: savedUser.email,
+      },
+    };
+  }
 
   // ==============================
   // Registro de usuarios internos
