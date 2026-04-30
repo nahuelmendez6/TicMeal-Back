@@ -149,4 +149,14 @@ export class UsersController {
     }
     return found;
   }
+
+  @Post('profile/complete')
+  async completeProfile(
+    @Body() dto: UpdateUserDto,
+    @Req() req: Request,
+    @Tenant() tenantId: number,
+  ) {
+    const userReq: any = (req as any).user;
+    return this.usersService.completeProfile(userReq.id, dto, tenantId);
+  }
 }
