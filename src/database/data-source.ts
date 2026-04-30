@@ -30,6 +30,7 @@ import { TicketItem } from '../modules/tickets/entities/ticket-item.entity';
 import { Ticket } from '../modules/tickets/entities/ticket.entity';
 import { Observation } from '../modules/users/entities/observation.entity';
 import { User } from '../modules/users/entities/user.entity';
+import { Invitation } from '../modules/users/entities/invitation.entity';
 import { WasteLog } from '../modules/waste/entities/waste-log.entity';
 
 
@@ -69,6 +70,7 @@ export const AppDataSource = new DataSource({
     Ticket,
     Observation,
     User,
+    Invitation,
     WasteLog,
   ],
   migrations: [
