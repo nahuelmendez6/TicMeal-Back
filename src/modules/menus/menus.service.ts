@@ -98,6 +98,7 @@ export class MenusService {
   async findPublishedForUser(
     companyId: number,
     userId?: number,
+    strictFilter: boolean = false,
   ): Promise<any[]> {
     const today = new Date();
     const menus = await this.menuRepository.find({
@@ -132,27 +133,34 @@ export class MenusService {
 
     if (!user) return menus;
 
-    // Inject compatibility flags
-    return menus.map((menu) => ({
-      ...menu,
-      menuDays: menu.menuDays.map((day) => ({
-        ...day,
-        menuOptions: day.menuOptions.map((option) => {
-          const aggregatedObs = this.menuItemService.getAggregatedObservations(
-            option.menuItem,
-          );
-          const compatibility = CompatibilityUtil.evaluate(
-            user.observations || [],
-            aggregatedObs,
-          );
-          return {
-            ...option,
-            isCompatible: compatibility.isCompatible,
-            conflictingObservations: compatibility.conflicts,
-          };
-        }),
-      })),
-    }));
+    // Inject compatibility flags and filter if requested
+    return menus
+      .map((menu) => ({
+        ...menu,
+        menuDays: menu.menuDays
+          .map((day) => ({
+            ...day,
+            menuOptions: day.menuOptions
+              .map((option) => {
+                const aggregatedObs =
+                  this.menuItemService.getAggregatedObservations(
+                    option.menuItem,
+                  );
+                const compatibility = CompatibilityUtil.evaluate(
+                  user.observations || [],
+                  aggregatedObs,
+                );
+                return {
+                  ...option,
+                  isCompatible: compatibility.isCompatible,
+                  conflictingObservations: compatibility.conflicts,
+                };
+              })
+              .filter((option) => !strictFilter || option.isCompatible),
+          }))
+          .filter((day) => day.menuOptions.length > 0),
+      }))
+      .filter((menu) => menu.menuDays.length > 0);
   }
 
   /**
