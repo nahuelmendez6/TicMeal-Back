@@ -12,7 +12,9 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { UsersService } from '../services/user.service';
+import { InvitationsService } from '../services/invitations.service';
 import { CreateUserDto } from '../dto/create.user.dto';
+import { CreateInvitationDto } from '../dto/create-invitation.dto';
 import { UpdateUserDto } from '../dto/update.user.dto';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { Roles } from 'src/modules/auth/decorators/roles.decorators';
