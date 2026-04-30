@@ -176,6 +176,7 @@ export class MenusService {
     menuId: string,
     companyId: number,
     userId?: number,
+    strictFilter: boolean = false,
   ): Promise<any[]> {
     // Ensure the menu exists and belongs to the company
     const menu = await this.menuRepository.findOne({
@@ -211,23 +212,26 @@ export class MenusService {
 
     if (!user) return days;
 
-    return days.map((day) => ({
-      ...day,
-      menuOptions: day.menuOptions.map((option) => {
-        const aggregatedObs = this.menuItemService.getAggregatedObservations(
-          option.menuItem,
-        );
-        const compatibility = CompatibilityUtil.evaluate(
-          user.observations || [],
-          aggregatedObs,
-        );
-        return {
-          ...option,
-          isCompatible: compatibility.isCompatible,
-          conflictingObservations: compatibility.conflicts,
-        };
-      }),
-    }));
+    return days
+      .map((day) => ({
+        ...day,
+        menuOptions: day.menuOptions
+          .map((option) => {
+            const aggregatedObs =
+              this.menuItemService.getAggregatedObservations(option.menuItem);
+            const compatibility = CompatibilityUtil.evaluate(
+              user.observations || [],
+              aggregatedObs,
+            );
+            return {
+              ...option,
+              isCompatible: compatibility.isCompatible,
+              conflictingObservations: compatibility.conflicts,
+            };
+          })
+          .filter((option) => !strictFilter || option.isCompatible),
+      }))
+      .filter((day) => day.menuOptions.length > 0);
   }
 
   /**
