@@ -7,6 +7,7 @@ import { WaitingListEntry, WaitlistStatus } from '../entities/waiting-list-entry
 import { CreateReservationDto } from '../dto/create-reservation.dto';
 import { MenuOption } from 'src/modules/menus/entities/menu-option.entity';
 import { User } from 'src/modules/users/entities/user.entity';
+import { TicketService } from 'src/modules/tickets/services/ticket.service';
 import { TenantAwareRepository } from 'src/common/repository/tenant-aware.repository';
 import * as crypto from 'crypto';
 
@@ -23,6 +24,7 @@ export class ReservationsService {
     private readonly menuOptionRepository: Repository<MenuOption>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly ticketService: TicketService,
   ) {}
 
   /**
@@ -42,7 +44,7 @@ export class ReservationsService {
     // 1. Fetch related entities
     const menuOption = await this.menuOptionRepository.findOne({
       where: { id: menuOptionId, companyId },
-      relations: { menuDay: true },
+      relations: { menuDay: true, menuItem: true },
     });
 
     if (!menuOption) {
@@ -53,10 +55,20 @@ export class ReservationsService {
       this.timeslotRepository,
       timeslotId,
       companyId,
+      { relations: { shift: true } },
     );
 
     if (!timeslot) {
       throw new NotFoundException('Selected timeslot not found or access denied');
+    }
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId, companyId },
+      relations: { observations: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
     }
 
     // 2. Duplicate booking check (One per user per menu day)
@@ -98,7 +110,18 @@ export class ReservationsService {
         ticketCode,
       });
 
-      return this.reservationRepository.save(reservation);
+      const savedReservation = await this.reservationRepository.save(reservation);
+
+      // AUTOMATIC TICKET GENERATION
+      await this.ticketService.createFromReservation(
+        user,
+        menuOption.menuItem.id,
+        menuOption.menuDay.date,
+        timeslot.shift,
+        companyId,
+      );
+
+      return savedReservation;
     } else {
       // ADD TO WAITING LIST
       const lastEntry = await this.waitlistRepository.findOne({

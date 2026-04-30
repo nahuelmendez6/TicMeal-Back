@@ -115,44 +115,72 @@ export class TicketService {
     return usedTicket;
   }
 
+  async createFromReservation(
+    user: User,
+    menuItemId: number,
+    date: Date,
+    shift: Shift,
+    tenantId: number,
+  ): Promise<Ticket> {
+    return this.processTicketCreation(
+      user,
+      [menuItemId],
+      tenantId,
+      TicketStatus.PENDING,
+      date,
+      shift,
+    );
+  }
+
   private async processTicketCreation(
     user: User,
     menuItemIds: number[],
     tenantId: number,
     status: TicketStatus = TicketStatus.PENDING,
+    explicitDate?: Date,
+    explicitShift?: Shift,
   ) {
-    // 2. Obtener turno activo
     const now = new Date();
-    const hour = now.toTimeString().split(' ')[0]; // HH:mm:ss
-    const activeShift = await this.shiftService.findActiveShiftByHourForTenant(
-      tenantId,
-      hour,
-    );
-    if (!activeShift || activeShift.length === 0) {
-      throw new BadRequestException(
-        'No hay un turno activo en este momento para registrar el ticket.',
+    const dateToUse = explicitDate || now;
+    const hourToUse = dateToUse.toTimeString().split(' ')[0]; // HH:mm:ss
+
+    let shift: Shift;
+
+    if (explicitShift) {
+      shift = explicitShift;
+    } else {
+      // 2. Obtener turno activo (comportamiento original)
+      const activeShift = await this.shiftService.findActiveShiftByHourForTenant(
+        tenantId,
+        hourToUse,
       );
+      if (!activeShift || activeShift.length === 0) {
+        throw new BadRequestException(
+          'No hay un turno activo en este momento para registrar el ticket.',
+        );
+      }
+      shift = activeShift[0];
     }
 
     // 1.1 Validar que el usuario no tenga un ticket activo (no cancelado) en el turno actual
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(now);
-    todayEnd.setHours(23, 59, 59, 999);
+    const startOfDay = new Date(dateToUse);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(dateToUse);
+    endOfDay.setHours(23, 59, 59, 999);
 
     const existingTicket = await this.ticketRepository.findOne({
       where: {
         user: { id: user.id },
-        shift: { id: activeShift[0].id },
+        shift: { id: shift.id },
         status: Not(TicketStatus.CANCELLED),
         company: { id: tenantId },
-        date: Between(todayStart, todayEnd),
+        date: Between(startOfDay, endOfDay),
       },
     });
 
     if (existingTicket) {
       throw new BadRequestException(
-        'El usuario ya tiene un ticket generado para este turno en el día de hoy. Debe cancelarlo o usarlo antes de generar uno nuevo.',
+        'El usuario ya tiene un ticket generado para este turno en el día seleccionado. Debe cancelarlo o usarlo antes de generar uno nuevo.',
       );
     }
 
@@ -191,11 +219,11 @@ export class TicketService {
     // 4. Crear el ticket
     const newTicket = this.ticketRepository.create({
       user,
-      shift: activeShift[0],
+      shift: shift,
       items: ticketItems,
       observations,
-      date: now,
-      time: hour,
+      date: dateToUse,
+      time: hourToUse,
       company: { id: tenantId },
       status: status,
     });

@@ -34,5 +34,6 @@ import { TicketGateway } from './services/ticket.gateway';
   ],
   controllers: [TicketController],
   providers: [TicketService, TicketGateway], // TicketService ahora puede inyectar UsersService y ShiftService
+  exports: [TicketService],
 })
 export class TicketModule {}

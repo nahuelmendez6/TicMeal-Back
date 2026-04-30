@@ -10,6 +10,7 @@ import { TimeslotsController } from './controllers/timeslots.controller';
 import { TimeslotsService } from './services/timeslots.service';
 import { ReservationsController } from './controllers/reservations.controller';
 import { ReservationsService } from './services/reservations.service';
+import { TicketModule } from '../tickets/ticket.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ReservationsService } from './services/reservations.service';
       User,
       MenuOption,
     ]),
+    TicketModule,
   ],
   controllers: [TimeslotsController, ReservationsController],
   providers: [TimeslotsService, ReservationsService],
