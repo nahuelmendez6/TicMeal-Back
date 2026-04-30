@@ -69,6 +69,9 @@ export class User extends BaseTenantEntity {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ name: 'is_first_login', default: true })
+  isFirstLogin: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 
