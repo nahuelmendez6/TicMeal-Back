@@ -225,6 +225,36 @@ export class UsersService {
     return true;
   }
 
+  async completeProfile(
+    userId: number,
+    dto: UpdateUserDto,
+    companyId: number,
+  ): Promise<User> {
+    const user = await this.userRepo.findOne({
+      where: { id: userId, companyId },
+      relations: ['observations'],
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (dto.password) {
+      const salt = await bcrypt.genSalt();
+      user.password = await bcrypt.hash(dto.password, salt);
+    }
+
+    if (dto.observationIds !== undefined) {
+      const observations = await this.observationRepo.findBy({
+        id: In(dto.observationIds),
+      });
+      user.observations = observations;
+    }
+
+    user.isFirstLogin = false;
+    return this.userRepo.save(user);
+  }
+
   async validatePassword(password: string, hash: string): Promise<boolean> {
     return bcrypt.compare(password, hash);
   }
