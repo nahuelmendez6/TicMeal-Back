@@ -8,13 +8,16 @@ import { ShiftModule } from '../shift/shift.module';
 import { Shift } from '../shift/entities/shift.entity';
 import { MenusController } from './menus.controller';
 import { User } from '../users/entities/user.entity';
+import { Company } from '../companies/entities/company.entity';
 import { StockModule } from '../stock/stock.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Menu, MenuDay, MenuOption, Shift, User]),
+    TypeOrmModule.forFeature([Menu, MenuDay, MenuOption, Shift, User, Company]),
     ShiftModule,
     forwardRef(() => StockModule),
+    MailModule,
   ],
   controllers: [MenusController],
   providers: [MenusService],

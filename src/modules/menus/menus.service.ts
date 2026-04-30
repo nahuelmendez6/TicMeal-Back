@@ -7,6 +7,8 @@ import { MenuDay } from './entities/menu-day.entity';
 import { MenuOption } from './entities/menu-option.entity';
 import { Shift } from '../shift/entities/shift.entity';
 import { User } from '../users/entities/user.entity';
+import { Company } from '../companies/entities/company.entity';
+import { MailService } from '../mail/services/mail.service';
 import { MenuItemService } from '../stock/services/menu-item.service';
 import { CompatibilityUtil } from 'src/common/utils/compatibility.util';
 
@@ -32,6 +34,9 @@ export class MenusService {
     private readonly shiftRepository: Repository<Shift>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Company)
+    private readonly companyRepo: Repository<Company>,
+    private readonly mailService: MailService,
     private readonly menuItemService: MenuItemService,
     private readonly dataSource: DataSource,
   ) {}
@@ -245,8 +250,39 @@ export class MenusService {
    */
   async update(id: string, updateMenuDto: UpdateMenuDto, companyId: number): Promise<Menu> {
     const menu = await this.findOne(id, companyId); // Ensures menu exists and belongs to tenant
+    const oldStatus = menu.status;
     const updatedMenu = this.menuRepository.merge(menu, updateMenuDto);
-    return this.menuRepository.save(updatedMenu);
+    const savedMenu = await this.menuRepository.save(updatedMenu);
+
+    if (oldStatus !== MenuStatus.PUBLISHED && savedMenu.status === MenuStatus.PUBLISHED) {
+      // Notify diners asynchronously
+      this.notifyDiners(savedMenu, companyId).catch(err => 
+        console.error('Error notifying diners about new menu:', err)
+      );
+    }
+
+    return savedMenu;
+  }
+
+  private async notifyDiners(menu: Menu, companyId: number) {
+    const company = await this.companyRepo.findOneBy({ id: companyId });
+    if (!company) return;
+
+    const diners = await this.userRepository.find({
+      where: { companyId, role: 'diner', isActive: true },
+    });
+
+    const startDateStr = menu.startDate.toISOString().split('T')[0];
+    const endDateStr = menu.endDate.toISOString().split('T')[0];
+
+    for (const diner of diners) {
+      await this.mailService.sendMenuUpdate(
+        diner,
+        company.name,
+        startDateStr,
+        endDateStr,
+      );
+    }
   }
 
   /**

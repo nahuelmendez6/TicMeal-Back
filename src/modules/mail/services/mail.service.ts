@@ -93,4 +93,61 @@ export class MailService {
       );
     }
   }
+
+  async sendInvitation(email: string, companyName: string, token: string) {
+    try {
+      const registrationUrl = `${process.env.FRONTEND_URL}/register?token=${token}`;
+      const htmlContent = await this.compileTemplate('invitation', {
+        companyName,
+        registrationUrl,
+        token,
+      });
+
+      await this.apiInstance.sendTransacEmail({
+        subject: `Invitación a unirte a ${companyName} en TicMeal`,
+        htmlContent: htmlContent,
+        sender: { name: 'TicMeal', email: process.env.MAIL_USER },
+        to: [{ email }],
+      });
+
+      this.logger.log(`Email de invitación enviado a ${email}`);
+    } catch (error) {
+      this.logger.error(
+        `Error API Brevo enviando invitación a ${email}:`,
+        error.response?.body || error,
+      );
+    }
+  }
+
+  async sendMenuUpdate(
+    user: User,
+    companyName: string,
+    startDate: string,
+    endDate: string,
+  ) {
+    try {
+      const platformUrl = `${process.env.FRONTEND_URL}/menus`;
+      const htmlContent = await this.compileTemplate('menu-update', {
+        firstName: user.firstName ?? 'Diner',
+        companyName,
+        startDate,
+        endDate,
+        platformUrl,
+      });
+
+      await this.apiInstance.sendTransacEmail({
+        subject: `🍽️ Nuevo Menú publicado en ${companyName}`,
+        htmlContent: htmlContent,
+        sender: { name: 'TicMeal', email: process.env.MAIL_USER },
+        to: [{ email: user.email }],
+      });
+
+      this.logger.log(`Email de actualización de menú enviado a ${user.email}`);
+    } catch (error) {
+      this.logger.error(
+        `Error API Brevo enviando actualización de menú a ${user.email}:`,
+        error.response?.body || error,
+      );
+    }
+  }
 }

@@ -9,9 +9,10 @@ import { UsersController } from './controllers/users.controllers';
 import { ObservationController } from './controllers/observation.controller';
 import { Observation } from '../users/entities/observation.entity';
 import { Company } from '../companies/entities/company.entity';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, Company, Observation, Invitation])],
+  imports: [TypeOrmModule.forFeature([User, Company, Observation, Invitation]), MailModule],
   providers: [UsersService, ObservationService, InvitationsService],
   controllers: [UsersController, ObservationController],
   exports: [UsersService, ObservationService, InvitationsService],

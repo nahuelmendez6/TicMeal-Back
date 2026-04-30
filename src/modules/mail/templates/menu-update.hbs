@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Nuevo Menú en {{companyName}}</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { width: 80%; margin: 20px auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px; }
+        .button { display: inline-block; padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🍽️ ¡Ya está disponible el nuevo menú!</h2>
+        <p>Hola {{firstName}},</p>
+        <p>Se ha publicado un nuevo cronograma de menú en <strong>{{companyName}}</strong> para el período del <strong>{{startDate}}</strong> al <strong>{{endDate}}</strong>.</p>
+        <p>Entra a la plataforma para reservar tus opciones preferidas y asegurar tu plato:</p>
+        <a href="{{platformUrl}}" class="button">Ver Menú y Reservar</a>
+        <p>¡Te esperamos!</p>
+    </div>
+</body>
+</html>
