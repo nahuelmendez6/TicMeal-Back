@@ -99,7 +99,8 @@ export class MenusController {
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden. Tenant access denied.' })
   findPublished(@Tenant() companyId: number, @CurrentUser() user: User) {
-    return this.menusService.findPublishedForUser(companyId, user.id);
+    const isDiner = user.role === 'diner';
+    return this.menusService.findPublishedForUser(companyId, user.id, isDiner);
   }
 
   /**
@@ -149,7 +150,13 @@ export class MenusController {
     @Tenant() companyId: number,
     @CurrentUser() user: User,
   ) {
-    return this.menusService.getMenuOptionsByDay(id, companyId, user.id);
+    const isDiner = user.role === 'diner';
+    return this.menusService.getMenuOptionsByDay(
+      id,
+      companyId,
+      user.id,
+      isDiner,
+    );
   }
 
   /**
