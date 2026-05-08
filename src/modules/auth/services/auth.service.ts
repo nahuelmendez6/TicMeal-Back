@@ -243,29 +243,12 @@ export class AuthService {
   // ==============================
 
   async login(username: string, password: string) {
-    console.log(`[DEBUG] Intentando login para username: "${username}"`);
     const user = await this.userService.findByUsername(username);
-    
-    if (!user) {
-      console.log(`[DEBUG] Usuario no encontrado: "${username}"`);
-      throw new UnauthorizedException('Credenciales inválidas');
-    }
+    if (!user) throw new UnauthorizedException('Credenciales inválidas');
 
-    console.log(`[DEBUG] Usuario encontrado: ${user.username} (ID: ${user.id})`);
-    console.log(`[DEBUG] Password enviado (exacto): "${password}" (length: ${password.length})`);
-    
-    const storedHash = user.password || '';
-    console.log(`[DEBUG] Hash en DB (inicio...fin): ${storedHash.substring(0, 10)}...${storedHash.substring(storedHash.length - 10)} (length: ${storedHash.length})`);
-
-    let isValid = false;
-    try {
-      isValid = user.password
-        ? await this.userService.validatePassword(password, user.password)
-        : false;
-      console.log(`[DEBUG] Resultado bcrypt.compare: ${isValid}`);
-    } catch (err) {
-      console.log(`[DEBUG] Error en bcrypt.compare: ${err.message}`);
-    }
+    const isValid = user.password
+      ? await this.userService.validatePassword(password, user.password)
+      : false;
 
     if (!isValid) throw new UnauthorizedException('Credenciales inválidas');
 
@@ -342,8 +325,6 @@ export class AuthService {
     }
 
     // 7. Crear usuario de forma explícita para evitar que el spread sobreescriba campos
-    console.log(`[DEBUG] CREACIÓN: Password plano que se va a hashear: "${password}"`);
-    
     const newUser = new User();
     newUser.email = userDto.email;
     newUser.firstName = userDto.firstName;
@@ -356,8 +337,6 @@ export class AuthService {
     newUser.observations = observations;
     newUser.isFirstLogin = true;
     newUser.isActive = true;
-
-    console.log(`[DEBUG] CREACIÓN: Hash asignado al entity: ${newUser.password.substring(0, 10)}...`);
 
     await this.userRepo.save(newUser);
 
