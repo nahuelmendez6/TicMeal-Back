@@ -61,8 +61,13 @@ export class AuthService {
       });
     }
 
+    // Generar username basado en el email y nombre de la empresa
+    const emailPrefix = invitation.email.split('@')[0];
+    const username = `${emailPrefix}@${company.name.replace(/\s+/g, '').toLowerCase()}`;
+
     const newUser = this.userRepo.create({
       email: invitation.email,
+      username: username,
       firstName: dto.firstName,
       lastName: dto.lastName,
       password: passwordHash,
@@ -180,7 +185,8 @@ export class AuthService {
       const company = compRepoTx.create(companyDto);
       await compRepoTx.save(company);
 
-      const username = `${company.name}@ticmeal`.toLowerCase();
+      const emailPrefix = adminDto.email.split('@')[0];
+      const username = `${emailPrefix}@${company.name.replace(/\s+/g, '').toLowerCase()}`;
 
       const salt = await bcrypt.genSalt();
       const passwordHash = await bcrypt.hash(adminDto.password, salt);
@@ -237,12 +243,29 @@ export class AuthService {
   // ==============================
 
   async login(username: string, password: string) {
+    console.log(`[DEBUG] Intentando login para username: "${username}"`);
     const user = await this.userService.findByUsername(username);
-    if (!user) throw new UnauthorizedException('Credenciales inválidas');
+    
+    if (!user) {
+      console.log(`[DEBUG] Usuario no encontrado: "${username}"`);
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
 
-    const isValid = user.password
-      ? await this.userService.validatePassword(password, user.password)
-      : false;
+    console.log(`[DEBUG] Usuario encontrado: ${user.username} (ID: ${user.id})`);
+    console.log(`[DEBUG] Password enviado (exacto): "${password}" (length: ${password.length})`);
+    
+    const storedHash = user.password || '';
+    console.log(`[DEBUG] Hash en DB (inicio...fin): ${storedHash.substring(0, 10)}...${storedHash.substring(storedHash.length - 10)} (length: ${storedHash.length})`);
+
+    let isValid = false;
+    try {
+      isValid = user.password
+        ? await this.userService.validatePassword(password, user.password)
+        : false;
+      console.log(`[DEBUG] Resultado bcrypt.compare: ${isValid}`);
+    } catch (err) {
+      console.log(`[DEBUG] Error en bcrypt.compare: ${err.message}`);
+    }
 
     if (!isValid) throw new UnauthorizedException('Credenciales inválidas');
 
@@ -283,20 +306,9 @@ export class AuthService {
     // 3. Verificar duplicados
     await this.ensureEmailIsUnique(userDto.email);
 
-    // 4. Generar username si aplica
-    let username: string | undefined;
-    if (role !== UserRole.DINER) {
-      if (!userDto.firstName)
-        throw new BadRequestException(
-          'El nombre es obligatorio para crear username',
-        );
-
-      username = await this.userService.generateUniqueUsername(
-        userDto.firstName,
-        company.id,
-        company.name,
-      );
-    }
+    // 4. Generar username
+    const emailPrefix = userDto.email.split('@')[0];
+    const username = `${emailPrefix}@${company.name.replace(/\s+/g, '').toLowerCase()}`;
 
     // 5. Generar PIN y hash
     const pin = this.generatePin();
@@ -308,8 +320,10 @@ export class AuthService {
       password = Math.floor(100000 + Math.random() * 900000).toString();
     }
 
+    console.log(`[DEBUG] Generando usuario. Password plano: "${password}"`);
     const salt = await bcrypt.genSalt();
     const passwordHash = await bcrypt.hash(password, salt);
+    console.log(`[DEBUG] Hash generado: ${passwordHash.substring(0, 10)}...`);
 
     // 6. Buscar observaciones opcionales (solo del tenant del usuario)
     let observations: Observation[] = [];
@@ -327,17 +341,23 @@ export class AuthService {
       }
     }
 
-    // 7. Crear usuario
-    const newUser = this.userRepo.create({
-      ...userDto,
-      username,
-      password: passwordHash,
-      role,
-      company,
-      pinHash,
-      observations,
-      isFirstLogin: true,
-    });
+    // 7. Crear usuario de forma explícita para evitar que el spread sobreescriba campos
+    console.log(`[DEBUG] CREACIÓN: Password plano que se va a hashear: "${password}"`);
+    
+    const newUser = new User();
+    newUser.email = userDto.email;
+    newUser.firstName = userDto.firstName;
+    newUser.lastName = userDto.lastName;
+    newUser.username = username;
+    newUser.password = passwordHash;
+    newUser.role = role;
+    newUser.company = company;
+    newUser.pinHash = pinHash;
+    newUser.observations = observations;
+    newUser.isFirstLogin = true;
+    newUser.isActive = true;
+
+    console.log(`[DEBUG] CREACIÓN: Hash asignado al entity: ${newUser.password.substring(0, 10)}...`);
 
     await this.userRepo.save(newUser);
 

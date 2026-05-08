@@ -110,7 +110,6 @@ export class MenusService {
       where: {
         companyId,
         status: MenuStatus.PUBLISHED,
-        startDate: LessThanOrEqual(today),
         endDate: MoreThanOrEqual(today),
       },
       relations: [
