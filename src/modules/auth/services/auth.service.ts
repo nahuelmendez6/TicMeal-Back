@@ -208,7 +208,7 @@ export class AuthService {
       await this.mailService.sendUserCredentials(
         savedAdmin,
         company,
-        undefined,
+        adminDto.password,
       );
 
       // aca va envio de email
@@ -253,7 +253,16 @@ export class AuthService {
       companyId: user.company?.id,
     };
 
-    return { access_token: this.jwtService.sign(payload), payload };
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        isFirstLogin: user.isFirstLogin,
+        companyId: user.company?.id,
+      },
+    };
   }
 
   // ==============================
@@ -294,15 +303,13 @@ export class AuthService {
     const pinHash = await this.hashPin(pin);
 
     let password = userDto.password;
-    if (role === UserRole.KITCHEN_ADMIN) {
-      password = this.generatePassword();
+    if (!password) {
+      // Generar contraseña numérica simple (6 dígitos) si no se provee
+      password = Math.floor(100000 + Math.random() * 900000).toString();
     }
 
-    let passwordHash: string | undefined;
-    if (password) {
-      const salt = await bcrypt.genSalt();
-      passwordHash = await bcrypt.hash(password, salt);
-    }
+    const salt = await bcrypt.genSalt();
+    const passwordHash = await bcrypt.hash(password, salt);
 
     // 6. Buscar observaciones opcionales (solo del tenant del usuario)
     let observations: Observation[] = [];
@@ -329,6 +336,7 @@ export class AuthService {
       company,
       pinHash,
       observations,
+      isFirstLogin: true,
     });
 
     await this.userRepo.save(newUser);

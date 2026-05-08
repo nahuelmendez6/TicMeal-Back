@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as SibApiV3Sdk from '@getbrevo/brevo';
+import { ConfigService } from '@nestjs/config';
 import * as handlebars from 'handlebars';
 import * as fs from 'fs';
 import { join } from 'path';
@@ -11,13 +12,20 @@ export class MailService {
   private apiInstance: SibApiV3Sdk.TransactionalEmailsApi;
   private readonly logger = new Logger(MailService.name);
 
-  constructor() {
+  constructor(private readonly configService: ConfigService) {
     this.apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-    // Configura tu API KEY de Brevo aquí
-    this.apiInstance.setApiKey(
-      SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey,
-      process.env.BREVO_API_KEY,
-    );
+    
+    const apiKey = this.configService.get<string>('BREVO_API_KEY');
+    
+    if (!apiKey) {
+      this.logger.error('BREVO_API_KEY is not defined in environment variables. Email service will not work correctly.');
+    } else {
+      // Configuración de la API KEY de Brevo
+      this.apiInstance.setApiKey(
+        SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey,
+        apiKey,
+      );
+    }
   }
 
   // Función auxiliar para procesar tus plantillas .hbs actuales
@@ -30,6 +38,12 @@ export class MailService {
       'dist/modules/mail/templates',
       `${templateName}.hbs`,
     );
+    
+    if (!fs.existsSync(templatePath)) {
+      this.logger.error(`Template not found at: ${templatePath}`);
+      throw new Error(`Template ${templateName} not found`);
+    }
+
     const templateSource = fs.readFileSync(templatePath, 'utf8');
     const compiledTemplate = handlebars.compile(templateSource);
     return compiledTemplate(context);
@@ -50,10 +64,12 @@ export class MailService {
         companyName: company.name,
       });
 
+      const mailUser = this.configService.get<string>('MAIL_USER');
+
       await this.apiInstance.sendTransacEmail({
         subject: `Bienvenido a ${company.name}`,
         htmlContent: htmlContent,
-        sender: { name: 'TicMeal', email: process.env.MAIL_USER },
+        sender: { name: 'TicMeal', email: mailUser },
         to: [{ email: user.email }],
       });
 
@@ -78,10 +94,12 @@ export class MailService {
         companyName: company.name,
       });
 
+      const mailUser = this.configService.get<string>('MAIL_USER');
+
       await this.apiInstance.sendTransacEmail({
         subject: `Código de verificación para ${company.name}`,
         htmlContent: htmlContent,
-        sender: { name: 'TicMeal', email: process.env.MAIL_USER },
+        sender: { name: 'TicMeal', email: mailUser },
         to: [{ email: user.email }],
       });
 
@@ -96,17 +114,20 @@ export class MailService {
 
   async sendInvitation(email: string, companyName: string, token: string) {
     try {
-      const registrationUrl = `${process.env.FRONTEND_URL}/register?token=${token}`;
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+      const registrationUrl = `${frontendUrl}/register?token=${token}`;
       const htmlContent = await this.compileTemplate('invitation', {
         companyName,
         registrationUrl,
         token,
       });
 
+      const mailUser = this.configService.get<string>('MAIL_USER');
+
       await this.apiInstance.sendTransacEmail({
         subject: `Invitación a unirte a ${companyName} en TicMeal`,
         htmlContent: htmlContent,
-        sender: { name: 'TicMeal', email: process.env.MAIL_USER },
+        sender: { name: 'TicMeal', email: mailUser },
         to: [{ email }],
       });
 
@@ -126,7 +147,8 @@ export class MailService {
     endDate: string,
   ) {
     try {
-      const platformUrl = `${process.env.FRONTEND_URL}/menus`;
+      const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+      const platformUrl = `${frontendUrl}/menus`;
       const htmlContent = await this.compileTemplate('menu-update', {
         firstName: user.firstName ?? 'Diner',
         companyName,
@@ -135,10 +157,12 @@ export class MailService {
         platformUrl,
       });
 
+      const mailUser = this.configService.get<string>('MAIL_USER');
+
       await this.apiInstance.sendTransacEmail({
         subject: `🍽️ Nuevo Menú publicado en ${companyName}`,
         htmlContent: htmlContent,
-        sender: { name: 'TicMeal', email: process.env.MAIL_USER },
+        sender: { name: 'TicMeal', email: mailUser },
         to: [{ email: user.email }],
       });
 
