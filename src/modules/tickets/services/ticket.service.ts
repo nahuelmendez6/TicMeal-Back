@@ -140,8 +140,7 @@ export class TicketService {
     explicitDate?: Date,
     explicitShift?: Shift,
   ) {
-    const now = new Date();
-    const dateToUse = explicitDate || now;
+    const dateToUse = explicitDate ? new Date(explicitDate) : new Date();
     const hourToUse = dateToUse.toTimeString().split(' ')[0]; // HH:mm:ss
 
     let shift: Shift;
