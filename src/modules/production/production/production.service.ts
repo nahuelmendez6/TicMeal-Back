@@ -470,14 +470,29 @@ export class ProductionService {
       .where('pickingList.date = :date', { date: dateOnly })
       .leftJoinAndSelect('pickingList.items', 'items')
       .leftJoinAndSelect('items.ingredient', 'ingredient')
+      .leftJoinAndSelect('ingredient.lots', 'lots') // Load lots to calculate current stock
       .getOne();
 
     if (!pickingList) {
-      this.logger.warn(`PickingList not found for company ${companyId} and date ${dateOnly}`);
+      this.logger.warn(
+        `PickingList not found for company ${companyId} and date ${dateOnly}`,
+      );
       throw new NotFoundException(
         `PickingList for date ${dateOnly} not found for company ${companyId}.`,
       );
     }
+
+    // Calculate stock for each item's ingredient
+    if (pickingList.items) {
+      for (const item of pickingList.items) {
+        if (item.ingredient) {
+          item.ingredient.quantityInStock = item.ingredient.lots
+            ? item.ingredient.lots.reduce((sum, lot) => sum + lot.quantity, 0)
+            : 0;
+        }
+      }
+    }
+
     return pickingList;
   }
 
@@ -532,7 +547,7 @@ export class ProductionService {
   ): Promise<PickingList> {
     const list = await this.pickingListRepository.findOne({
       where: { id, companyId },
-      relations: { items: { ingredient: true } },
+      relations: { items: { ingredient: { lots: true } } }, // Load lots to calculate stock
     });
 
     if (!list) {
@@ -548,7 +563,20 @@ export class ProductionService {
 
     // 2. Mark as COMPLETED
     list.status = PickingListStatus.COMPLETED;
-    return this.pickingListRepository.save(list);
+    const savedList = await this.pickingListRepository.save(list);
+
+    // Calculate stock for the response
+    if (savedList.items) {
+      for (const item of savedList.items) {
+        if (item.ingredient) {
+          item.ingredient.quantityInStock = item.ingredient.lots
+            ? item.ingredient.lots.reduce((sum, lot) => sum + lot.quantity, 0)
+            : 0;
+        }
+      }
+    }
+
+    return savedList;
   }
 
   private async deductStockForPickingList(list: PickingList, user: User) {
