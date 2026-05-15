@@ -331,17 +331,17 @@ export class ProductionService {
     if (pickingListItems.length > 0) {
       const pickingList = this.pickingListRepository.create({
         companyId,
-        date: new Date(targetDate),
+        date: targetDate as any,
         status: PickingListStatus.PENDING,
         items: pickingListItems,
       });
-      await this.pickingListRepository.save(pickingList);
+      const savedList = await this.pickingListRepository.save(pickingList);
       this.logger.log(
-        `Picking List created for company ${companyId} on ${targetDate} with ${pickingListItems.length} items.`,
+        `Picking List ID ${savedList.id} created for company ${companyId} on ${targetDate} with ${pickingListItems.length} items.`,
       );
     } else {
       this.logger.log(
-        `No picking list generated for company ${companyId} on ${targetDate} as no ingredients are required.`,
+        `No picking list generated for company ${companyId} on ${targetDate} as no ingredients are required after consolidation.`,
       );
     }
 
@@ -376,19 +376,23 @@ export class ProductionService {
     companyId: number,
     date: string,
   ): Promise<PickingList> {
+    // Ensure we are comparing just the date part if it comes as ISO
+    const dateOnly = date.includes('T') ? date.split('T')[0] : date;
+
     const pickingList = await TenantAwareRepository.createTenantQueryBuilder(
       this.pickingListRepository,
       companyId,
       'pickingList',
     )
-      .where('pickingList.date = :date', { date: new Date(date) })
+      .where('pickingList.date = :date', { date: dateOnly })
       .leftJoinAndSelect('pickingList.items', 'items')
       .leftJoinAndSelect('items.ingredient', 'ingredient')
       .getOne();
 
     if (!pickingList) {
+      this.logger.warn(`PickingList not found for company ${companyId} and date ${dateOnly}`);
       throw new NotFoundException(
-        `PickingList for date ${date} not found for company ${companyId}.`,
+        `PickingList for date ${dateOnly} not found for company ${companyId}.`,
       );
     }
     return pickingList;
