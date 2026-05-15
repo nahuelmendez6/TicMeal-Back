@@ -176,174 +176,148 @@ export class ProductionService {
   private async _processProductionForCompany(
     companyId: number,
     targetDate: string,
+    specificShiftId?: number,
   ) {
     this.logger.log(
-      `Processing production details for company ${companyId} on ${targetDate}...`,
+      `Processing production details for company ${companyId} on ${targetDate}${specificShiftId ? ` for shift ${specificShiftId}` : ''}...`,
     );
 
-    // 1. Fetch all MealShifts for the company
-    const allMealShifts: MealShift[] = await TenantAwareRepository.findAllByTenant(
+    // 1. Fetch all Shifts that have activity (MealShifts or Reservations)
+    const allMealShifts = await TenantAwareRepository.findAllByTenant(
       this.mealShiftRepository,
       companyId,
       {
         relations: {
-          menuItem: {
-            recipeIngredients: {
-              ingredient: true,
-            },
-            lots: true,
-          },
+          menuItem: { recipeIngredients: { ingredient: true } },
         },
       },
     );
 
-    // Filter MealShifts that are active for the target date and have quantityProduced > 0
     const activeMealShifts = allMealShifts.filter(
-      (mealShift) =>
-        this.isMealShiftActiveForDate(mealShift, new Date(targetDate)) &&
-        mealShift.quantityProduced > 0,
+      (ms) =>
+        this.isMealShiftActiveForDate(ms, new Date(targetDate)) &&
+        ms.quantityProduced > 0 &&
+        (!specificShiftId || ms.shiftId === specificShiftId),
     );
 
-    const consolidatedIngredients = new Map<
-      number,
-      { quantity: number; ingredient: Ingredient }
-    >();
-
-    // 2. BOM Explosion: Calculate total required quantity for each ingredient
-
-    // 2a. Process MealShifts
-    for (const mealShift of activeMealShifts) {
-      if (mealShift.quantityProduced <= 0) continue;
-
-      for (const recipeIngredient of mealShift.menuItem.recipeIngredients) {
-        const requiredForOneMenuItem = recipeIngredient.quantity;
-        const totalRequired =
-          requiredForOneMenuItem * mealShift.quantityProduced;
-
-        this.addIngredientToConsolidation(
-          consolidatedIngredients,
-          recipeIngredient.ingredient,
-          totalRequired,
-        );
-      }
-    }
-
-    // 2b. Process Reservations
     const reservations = await TenantAwareRepository.findAllByTenant(
       this.reservationRepository,
       companyId,
       {
         where: {
           status: ReservationStatus.CONFIRMED,
-          menuOption: {
-            menuDay: {
-              date: targetDate as any,
-            },
-          },
+          menuOption: { menuDay: { date: targetDate as any } },
+          ...(specificShiftId ? { timeslot: { shiftId: specificShiftId } } : {}),
         },
         relations: {
+          timeslot: true,
           menuOption: {
-            menuItem: {
-              recipeIngredients: {
-                ingredient: true,
-              },
-            },
+            menuItem: { recipeIngredients: { ingredient: true } },
           },
         },
       },
     );
 
-    for (const res of reservations) {
-      const menuItem = res.menuOption?.menuItem;
-      if (!menuItem || !menuItem.recipeIngredients) continue;
+    // Group shift IDs to process
+    const shiftIds = new Set<number>();
+    activeMealShifts.forEach((ms) => shiftIds.add(ms.shiftId));
+    reservations.forEach((res) => shiftIds.add(res.timeslot.shiftId));
 
-      for (const recipeIngredient of menuItem.recipeIngredients) {
-        this.addIngredientToConsolidation(
-          consolidatedIngredients,
-          recipeIngredient.ingredient,
-          recipeIngredient.quantity,
-        );
+    for (const shiftId of shiftIds) {
+      await this.syncPickingListForShift(companyId, targetDate, shiftId, activeMealShifts, reservations);
+    }
+  }
+
+  public async syncPickingListForShift(
+    companyId: number,
+    targetDate: string,
+    shiftId: number,
+    cachedMealShifts?: MealShift[],
+    cachedReservations?: Reservation[],
+  ) {
+    const consolidatedIngredients = new Map<
+      number,
+      { quantity: number; ingredient: Ingredient }
+    >();
+
+    // 1. Filter data for this specific shift
+    const msForShift = (cachedMealShifts || []).filter((ms) => ms.shiftId === shiftId);
+    const resForShift = (cachedReservations || []).filter((res) => res.timeslot.shiftId === shiftId);
+
+    // If no cache provided, fetch them (for real-time individual sync)
+    if (!cachedMealShifts && !cachedReservations) {
+      const allMs = await TenantAwareRepository.findAllByTenant(this.mealShiftRepository, companyId, {
+        relations: { menuItem: { recipeIngredients: { ingredient: true } } },
+      });
+      msForShift.push(...allMs.filter(ms => ms.shiftId === shiftId && this.isMealShiftActiveForDate(ms, new Date(targetDate)) && ms.quantityProduced > 0));
+
+      const allRes = await TenantAwareRepository.findAllByTenant(this.reservationRepository, companyId, {
+        where: {
+          status: ReservationStatus.CONFIRMED,
+          timeslot: { shiftId },
+          menuOption: { menuDay: { date: targetDate as any } },
+        },
+        relations: { timeslot: true, menuOption: { menuItem: { recipeIngredients: { ingredient: true } } } },
+      });
+      resForShift.push(...allRes);
+    }
+
+    // 2. Consolidate MealShifts
+    for (const ms of msForShift) {
+      for (const ri of ms.menuItem.recipeIngredients) {
+        this.addIngredientToConsolidation(consolidatedIngredients, ri.ingredient, ri.quantity * ms.quantityProduced);
       }
     }
 
+    // 3. Consolidate Reservations
+    for (const res of resForShift) {
+      const menuItem = res.menuOption?.menuItem;
+      if (!menuItem?.recipeIngredients) continue;
+      for (const ri of menuItem.recipeIngredients) {
+        this.addIngredientToConsolidation(consolidatedIngredients, ri.ingredient, ri.quantity);
+      }
+    }
+
+    // 4. Find or Create PickingList for this Shift
+    let pickingList = await this.pickingListRepository.findOne({
+      where: { companyId, date: targetDate as any, shiftId },
+      relations: { items: true },
+    });
+
     if (consolidatedIngredients.size === 0) {
-      this.logger.log(
-        `No production required for company ${companyId} on ${targetDate}.`,
-      );
+      if (pickingList) await this.pickingListRepository.remove(pickingList);
       return;
     }
 
-    // 3. JIT Logic and Stock Check
-    const pickingListItems: PickingListItem[] = [];
-    const purchaseRequests: { ingredient: Ingredient; quantity: number }[] = [];
-
-    for (const [ingredientId, data] of consolidatedIngredients.entries()) {
-      const { quantity: totalRequiredQuantity, ingredient } = data;
-
-      // Fetch the ingredient again to get its current stock (assuming it's a computed property from lots)
-      // For simplicity, we'll assume `ingredient.lots` are loaded and can be used to calculate `quantityInStock`
-      // In a real scenario, you might have a dedicated stock service or computed property for this.
-      const currentIngredient: Ingredient =
-        await TenantAwareRepository.findOneByTenant(
-          this.ingredientRepository,
-          ingredient.id,
-          companyId,
-          {
-            relations: { lots: true }, // To compute quantityInStock
-          },
-        );
-
-      let quantityInStock = 0;
-      if (currentIngredient && currentIngredient.lots) {
-        quantityInStock = currentIngredient.lots.reduce(
-          (sum, lot) => sum + lot.quantity,
-          0,
-        );
-      }
-
-      const neededForPicking = Math.max(0, totalRequiredQuantity); // Only pick if > 0
-
-      // Add to picking list regardless of JIT for now
-      if (neededForPicking > 0) {
-        const pickingItem = this.pickingListItemRepository.create({
-          ingredient: currentIngredient,
-          requiredQuantity: neededForPicking,
-        });
-        pickingListItems.push(pickingItem);
-      }
-
-      if (
-        currentIngredient.isFresh &&
-        totalRequiredQuantity > quantityInStock
-      ) {
-        const quantityToPurchase = totalRequiredQuantity - quantityInStock;
-        purchaseRequests.push({
-          ingredient: currentIngredient, // Pass the full ingredient object
-          quantity: quantityToPurchase,
-        });
-        this.logger.warn(
-          `JIT: Company ${companyId} needs to purchase ${quantityToPurchase} of fresh ingredient ${currentIngredient.name}.`,
-        );
-      }
-    }
-
-    // 4. Generate PickingList
-    if (pickingListItems.length > 0) {
-      const pickingList = this.pickingListRepository.create({
+    if (!pickingList) {
+      pickingList = this.pickingListRepository.create({
         companyId,
         date: targetDate as any,
+        shiftId,
         status: PickingListStatus.PENDING,
-        items: pickingListItems,
+        items: [],
       });
-      const savedList = await this.pickingListRepository.save(pickingList);
-      this.logger.log(
-        `Picking List ID ${savedList.id} created for company ${companyId} on ${targetDate} with ${pickingListItems.length} items.`,
-      );
-    } else {
-      this.logger.log(
-        `No picking list generated for company ${companyId} on ${targetDate} as no ingredients are required after consolidation.`,
-      );
     }
+
+    // 5. Update Items
+    const newItems: PickingListItem[] = [];
+    for (const [ingredientId, data] of consolidatedIngredients.entries()) {
+      let item = pickingList.items?.find((i) => i.ingredientId === ingredientId);
+      if (item) {
+        item.requiredQuantity = data.quantity;
+      } else {
+        item = this.pickingListItemRepository.create({
+          ingredient: data.ingredient,
+          requiredQuantity: data.quantity,
+        });
+      }
+      newItems.push(item);
+    }
+    pickingList.items = newItems;
+
+    await this.pickingListRepository.save(pickingList);
+    this.logger.log(`Synced PickingList for company ${companyId}, date ${targetDate}, shift ${shiftId}`);
+  }
 
     // 5. Create draft Purchase Orders
     if (purchaseRequests.length > 0) {

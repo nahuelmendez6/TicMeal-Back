@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { BaseTenantEntity } from 'src/common/entities/base-tenant.entity';
 import { PickingListItem } from './picking-list-item.entity';
+import { Shift } from 'src/modules/shift/entities/shift.entity';
 
 export enum PickingListStatus {
   PENDING = 'PENDING',
@@ -10,6 +11,7 @@ export enum PickingListStatus {
 }
 
 @Entity('picking_lists')
+@Index(['companyId', 'date', 'shiftId'], { unique: true })
 export class PickingList extends BaseTenantEntity {
   @PrimaryGeneratedColumn()
   id: number;
@@ -23,6 +25,13 @@ export class PickingList extends BaseTenantEntity {
     default: PickingListStatus.PENDING,
   })
   status: PickingListStatus;
+
+  @ManyToOne(() => Shift, { nullable: true })
+  @JoinColumn({ name: 'shift_id' })
+  shift: Shift;
+
+  @Column({ name: 'shift_id', nullable: true })
+  shiftId: number;
 
   @OneToMany(() => PickingListItem, (item) => item.pickingList, {
     cascade: true,
