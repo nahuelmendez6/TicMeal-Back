@@ -10,6 +10,7 @@ import { User } from 'src/modules/users/entities/user.entity';
 import { TicketService } from 'src/modules/tickets/services/ticket.service';
 import { TenantAwareRepository } from 'src/common/repository/tenant-aware.repository';
 import * as crypto from 'crypto';
+import { format } from 'date-fns';
 
 @Injectable()
 export class ReservationsService {
@@ -79,18 +80,27 @@ export class ReservationsService {
       throw new NotFoundException('User not found');
     }
 
-    // 2. Duplicate booking check (One per user per menu day)
+    // 2. Duplicate booking check (One per user per shift per day)
+    const dateString = format(menuOption.menuDay.date, 'yyyy-MM-dd');
+    
     const existing = await this.reservationRepository.findOne({
       where: {
         userId,
-        menuOption: { menuDayId: menuOption.menuDayId },
+        timeslot: { shiftId: timeslot.shiftId },
+        menuOption: {
+          menuDay: {
+            date: dateString as any,
+          },
+        },
         status: ReservationStatus.CONFIRMED,
       },
-      relations: { menuOption: true }
+      relations: { menuOption: { menuDay: true }, timeslot: true },
     });
 
     if (existing) {
-      throw new BadRequestException('User already has a confirmed reservation for this day');
+      throw new BadRequestException(
+        `User already has a confirmed reservation for the shift "${timeslot.shift?.name}" on ${dateString}`,
+      );
     }
 
     // 3. Validation placeholder for health/allergens

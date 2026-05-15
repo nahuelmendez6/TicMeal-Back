@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, Not, LessThan, Between } from 'typeorm';
+import { format } from 'date-fns';
 
 import { Ticket, TicketStatus } from '../entities/ticket.entity';
 import { CreateTicketDto } from '../dto/create-ticket.dto';
@@ -162,7 +163,7 @@ export class TicketService {
     }
 
     // 1.1 Validar que el usuario no tenga un ticket activo (no cancelado) en el turno actual
-    const dateString = dateToUse.toISOString().split('T')[0];
+    const dateString = format(dateToUse, 'yyyy-MM-dd');
 
     const existingTicket = await this.ticketRepository.findOne({
       where: {
