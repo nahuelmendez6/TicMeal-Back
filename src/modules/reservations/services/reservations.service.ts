@@ -8,6 +8,7 @@ import { CreateReservationDto } from '../dto/create-reservation.dto';
 import { MenuOption } from 'src/modules/menus/entities/menu-option.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { TicketService } from 'src/modules/tickets/services/ticket.service';
+import { ProductionService } from 'src/modules/production/production/production.service';
 import { TenantAwareRepository } from 'src/common/repository/tenant-aware.repository';
 import * as crypto from 'crypto';
 import { format } from 'date-fns';
@@ -26,6 +27,7 @@ export class ReservationsService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly ticketService: TicketService,
+    private readonly productionService: ProductionService,
   ) {}
 
   /**
@@ -137,6 +139,13 @@ export class ReservationsService {
         menuOption.menuDay.date,
         timeslot.shift,
         companyId,
+      );
+
+      // SYNC PICKING LIST IN REAL-TIME
+      await this.productionService.syncPickingListForShift(
+        companyId,
+        format(menuOption.menuDay.date, 'yyyy-MM-dd'),
+        timeslot.shiftId,
       );
 
       return savedReservation;

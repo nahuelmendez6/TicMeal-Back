@@ -11,6 +11,7 @@ import { TimeslotsService } from './services/timeslots.service';
 import { ReservationsController } from './controllers/reservations.controller';
 import { ReservationsService } from './services/reservations.service';
 import { TicketModule } from '../tickets/ticket.module';
+import { ProductionModule } from '../production/production.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { TicketModule } from '../tickets/ticket.module';
       MenuOption,
     ]),
     TicketModule,
+    ProductionModule,
   ],
   controllers: [TimeslotsController, ReservationsController],
   providers: [TimeslotsService, ReservationsService],
