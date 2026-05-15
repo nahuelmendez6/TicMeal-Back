@@ -6,6 +6,7 @@ import {
   Booking,
   BookingStatus,
 } from 'src/modules/bookings/entities/booking.entity';
+import { Reservation, ReservationStatus } from 'src/modules/reservations/entities/reservation.entity';
 import { MealShift, Periodicity } from 'src/modules/stock/entities/meal-shift.entity';
 import { Company } from 'src/modules/companies/entities/company.entity';
 import { Repository } from 'typeorm';
@@ -31,6 +32,8 @@ export class ProductionService {
   constructor(
     @InjectRepository(Booking)
     private readonly bookingRepository: Repository<Booking>,
+    @InjectRepository(Reservation)
+    private readonly reservationRepository: Repository<Reservation>,
     @InjectRepository(MealShift)
     private readonly mealShiftRepository: Repository<MealShift>,
     @InjectRepository(Company)
@@ -201,38 +204,73 @@ export class ProductionService {
         mealShift.quantityProduced > 0,
     );
 
-    if (activeMealShifts.length === 0) {
-      this.logger.log(
-        `No active MealShifts with production for company ${companyId} on ${targetDate}.`,
-      );
-      return;
-    }
-
     const consolidatedIngredients = new Map<
       number,
       { quantity: number; ingredient: Ingredient }
     >();
 
     // 2. BOM Explosion: Calculate total required quantity for each ingredient
+
+    // 2a. Process MealShifts
     for (const mealShift of activeMealShifts) {
-      if (mealShift.quantityProduced <= 0) continue; // Only process if there's production
+      if (mealShift.quantityProduced <= 0) continue;
 
       for (const recipeIngredient of mealShift.menuItem.recipeIngredients) {
-        const requiredForOneMenuItem = recipeIngredient.quantity; // Quantity needed per menu item
+        const requiredForOneMenuItem = recipeIngredient.quantity;
         const totalRequired =
-          requiredForOneMenuItem * mealShift.quantityProduced; // Total needed for all produced items
+          requiredForOneMenuItem * mealShift.quantityProduced;
 
-        if (consolidatedIngredients.has(recipeIngredient.ingredient.id)) {
-          consolidatedIngredients.get(
-            recipeIngredient.ingredient.id,
-          ).quantity += totalRequired;
-        } else {
-          consolidatedIngredients.set(recipeIngredient.ingredient.id, {
-            quantity: totalRequired,
-            ingredient: recipeIngredient.ingredient,
-          });
-        }
+        this.addIngredientToConsolidation(
+          consolidatedIngredients,
+          recipeIngredient.ingredient,
+          totalRequired,
+        );
       }
+    }
+
+    // 2b. Process Reservations
+    const reservations = await TenantAwareRepository.findAllByTenant(
+      this.reservationRepository,
+      companyId,
+      {
+        where: {
+          status: ReservationStatus.CONFIRMED,
+          menuOption: {
+            menuDay: {
+              date: targetDate as any,
+            },
+          },
+        },
+        relations: {
+          menuOption: {
+            menuItem: {
+              recipeIngredients: {
+                ingredient: true,
+              },
+            },
+          },
+        },
+      },
+    );
+
+    for (const res of reservations) {
+      const menuItem = res.menuOption?.menuItem;
+      if (!menuItem || !menuItem.recipeIngredients) continue;
+
+      for (const recipeIngredient of menuItem.recipeIngredients) {
+        this.addIngredientToConsolidation(
+          consolidatedIngredients,
+          recipeIngredient.ingredient,
+          recipeIngredient.quantity,
+        );
+      }
+    }
+
+    if (consolidatedIngredients.size === 0) {
+      this.logger.log(
+        `No production required for company ${companyId} on ${targetDate}.`,
+      );
+      return;
     }
 
     // 3. JIT Logic and Stock Check
@@ -369,5 +407,23 @@ export class ProductionService {
     this.logger.log(
       `Manual production plan for company ${companyId} on ${date} completed.`,
     );
+  }
+
+  private addIngredientToConsolidation(
+    consolidatedIngredients: Map<
+      number,
+      { quantity: number; ingredient: Ingredient }
+    >,
+    ingredient: Ingredient,
+    quantity: number,
+  ) {
+    if (consolidatedIngredients.has(ingredient.id)) {
+      consolidatedIngredients.get(ingredient.id).quantity += quantity;
+    } else {
+      consolidatedIngredients.set(ingredient.id, {
+        quantity,
+        ingredient,
+      });
+    }
   }
 }

@@ -60,44 +60,22 @@ export class TenantAwareRepository {
    * @param id - ID de la entidad
    * @param companyId - ID de la compañía (tenant)
    * @param options - Opciones de búsqueda adicionales (where, relations, etc.)
-   * @param alias - Alias de la tabla (default: 'entity')
    * @returns La entidad encontrada o null
    */
   static async findOneByTenant<T extends BaseTenantEntity>(
     repo: Repository<T>,
-    id: number,
+    id: number | string,
     companyId: number,
-    options?: TenantFindOptions<T>, // New: options parameter
-    alias: string = 'entity',
+    options?: TenantFindOptions<T>,
   ): Promise<T | null> {
-    const qb = this.createTenantQueryBuilder(repo, companyId, alias);
-    qb.andWhere(`${alias}.id = :id`, { id }); // Add ID filter
-
-    if (options?.where) {
-      qb.andWhere(options.where);
-    }
-    if (options?.relations) {
-      for (const relation in options.relations) {
-        if (options.relations[relation]) {
-          qb.leftJoinAndSelect(`${alias}.${relation}`, relation);
-        }
-      }
-    }
-    if (options?.order) {
-      for (const key in options.order) {
-        if (Object.prototype.hasOwnProperty.call(options.order, key)) {
-          qb.addOrderBy(`${alias}.${key}`, options.order[key] as 'ASC' | 'DESC');
-        }
-      }
-    }
-    if (options?.skip) {
-      qb.skip(options.skip);
-    }
-    if (options?.take) {
-      qb.take(options.take);
-    }
-
-    return qb.getOne();
+    return repo.findOne({
+      ...options,
+      where: {
+        ...options?.where,
+        id,
+        companyId,
+      } as any,
+    });
   }
 
   /**
@@ -106,42 +84,20 @@ export class TenantAwareRepository {
    * @param repo - Repositorio de TypeORM
    * @param companyId - ID de la compañía (tenant)
    * @param options - Opciones de búsqueda adicionales (where, relations, etc.)
-   * @param alias - Alias de la tabla (default: 'entity')
    * @returns Array de entidades del tenant
    */
   static async findAllByTenant<T extends BaseTenantEntity>(
     repo: Repository<T>,
     companyId: number,
-    options?: TenantFindOptions<T>, // New: options parameter
-    alias: string = 'entity',
+    options?: TenantFindOptions<T>,
   ): Promise<T[]> {
-    const qb = this.createTenantQueryBuilder(repo, companyId, alias);
-
-    if (options?.where) {
-      qb.andWhere(options.where);
-    }
-    if (options?.relations) {
-      for (const relation in options.relations) {
-        if (options.relations[relation]) {
-          qb.leftJoinAndSelect(`${alias}.${relation}`, relation);
-        }
-      }
-    }
-    if (options?.order) {
-      for (const key in options.order) {
-        if (Object.prototype.hasOwnProperty.call(options.order, key)) {
-          qb.addOrderBy(`${alias}.${key}`, options.order[key] as 'ASC' | 'DESC');
-        }
-      }
-    }
-    if (options?.skip) {
-      qb.skip(options.skip);
-    }
-    if (options?.take) {
-      qb.take(options.take);
-    }
-
-    return qb.getMany();
+    return repo.find({
+      ...options,
+      where: {
+        ...options?.where,
+        companyId,
+      } as any,
+    });
   }
 
   /**

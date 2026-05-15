@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { PickingList } from './entities/picking-list.entity';
 import { PickingListItem } from './entities/picking-list-item.entity';
 import { Booking } from 'src/modules/bookings/entities/booking.entity';
+import { Reservation } from 'src/modules/reservations/entities/reservation.entity';
 import { MealShift } from 'src/modules/stock/entities/meal-shift.entity';
 import { Company } from 'src/modules/companies/entities/company.entity';
 import { Ingredient } from 'src/modules/stock/entities/ingredient.entity';
@@ -20,6 +21,7 @@ import { Supplier } from '../suppliers/entities/supplier.entity';
       PickingList,
       PickingListItem,
       Booking,
+      Reservation,
       MealShift,
       Company,
       Ingredient,
