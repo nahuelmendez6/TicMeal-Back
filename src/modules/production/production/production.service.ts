@@ -223,11 +223,66 @@ export class ProductionService {
     activeMealShifts.forEach((ms) => shiftIds.add(ms.shiftId));
     reservations.forEach((res) => shiftIds.add(res.timeslot.shiftId));
 
-    for (const shiftId of shiftIds) {
-      await this.syncPickingListForShift(companyId, targetDate, shiftId, activeMealShifts, reservations);
-    }
-  }
+    const dayConsolidatedIngredients = new Map<
+      number,
+      { quantity: number; ingredient: Ingredient }
+    >();
 
+    for (const shiftId of shiftIds) {
+      const shiftConsolidated = await this.syncPickingListForShift(
+        companyId,
+        targetDate,
+        shiftId,
+        activeMealShifts,
+        reservations,
+      );
+      // Aggregate for JIT check
+      for (const [id, data] of shiftConsolidated.entries()) {
+        this.addIngredientToConsolidation(
+          dayConsolidatedIngredients,
+          data.ingredient,
+          data.quantity,
+        );
+      }
+    }
+
+    // 3. JIT Logic and Stock Check
+    const purchaseRequests: { ingredient: Ingredient; quantity: number }[] = [];
+
+    for (const [ingredientId, data] of dayConsolidatedIngredients.entries()) {
+      const { quantity: totalRequiredQuantity, ingredient } = data;
+
+      const currentIngredient: Ingredient =
+        await TenantAwareRepository.findOneByTenant(
+          this.ingredientRepository,
+          ingredient.id,
+          companyId,
+          { relations: { lots: true } },
+        );
+
+      let quantityInStock = 0;
+      if (currentIngredient?.lots) {
+        quantityInStock = currentIngredient.lots.reduce(
+          (sum, lot) => sum + lot.quantity,
+          0,
+        );
+      }
+
+      if (
+        currentIngredient.isFresh &&
+        totalRequiredQuantity > quantityInStock
+      ) {
+        purchaseRequests.push({
+          ingredient: currentIngredient,
+          quantity: totalRequiredQuantity - quantityInStock,
+        });
+        this.logger.warn(
+          `JIT: Company ${companyId} needs to purchase ${totalRequiredQuantity - quantityInStock} of fresh ingredient ${currentIngredient.name}.`,
+        );
+      }
+    }
+
+    // 5. Create draft Purchase Orders
   public async syncPickingListForShift(
     companyId: number,
     targetDate: string,
@@ -317,6 +372,8 @@ export class ProductionService {
 
     await this.pickingListRepository.save(pickingList);
     this.logger.log(`Synced PickingList for company ${companyId}, date ${targetDate}, shift ${shiftId}`);
+
+    return consolidatedIngredients;
   }
 
     // 5. Create draft Purchase Orders
