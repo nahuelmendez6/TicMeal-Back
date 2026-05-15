@@ -43,7 +43,7 @@ export class TimeslotsController {
   @ApiOperation({ summary: 'List all pickup timeslots for the company' })
   findAll(
     @Tenant() companyId: number,
-    @Query('shiftId') shiftId?: number,
+    @Query('shiftId', new ParseIntPipe({ optional: true })) shiftId?: number,
   ) {
     return this.timeslotsService.findAll(companyId, shiftId);
   }

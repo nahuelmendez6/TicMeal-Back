@@ -162,10 +162,7 @@ export class TicketService {
     }
 
     // 1.1 Validar que el usuario no tenga un ticket activo (no cancelado) en el turno actual
-    const startOfDay = new Date(dateToUse);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(dateToUse);
-    endOfDay.setHours(23, 59, 59, 999);
+    const dateString = dateToUse.toISOString().split('T')[0];
 
     const existingTicket = await this.ticketRepository.findOne({
       where: {
@@ -173,7 +170,7 @@ export class TicketService {
         shift: { id: shift.id },
         status: Not(TicketStatus.CANCELLED),
         company: { id: tenantId },
-        date: Between(startOfDay, endOfDay),
+        date: dateString as any,
       },
     });
 

@@ -44,7 +44,7 @@ export class ReservationsService {
     // 1. Fetch related entities
     const menuOption = await this.menuOptionRepository.findOne({
       where: { id: menuOptionId, companyId },
-      relations: { menuDay: true, menuItem: true },
+      relations: { menuDay: true, menuItem: true, shifts: true },
     });
 
     if (!menuOption) {
@@ -60,6 +60,14 @@ export class ReservationsService {
 
     if (!timeslot) {
       throw new NotFoundException('Selected timeslot not found or access denied');
+    }
+
+    // Validate that the timeslot's shift is one of the shifts allowed for this menu option
+    const isShiftValid = menuOption.shifts.some((s) => s.id === timeslot.shiftId);
+    if (!isShiftValid) {
+      throw new BadRequestException(
+        `The selected timeslot belongs to shift "${timeslot.shift?.name}", but this menu option is only available for: ${menuOption.shifts.map((s) => s.name).join(', ')}`,
+      );
     }
 
     const user = await this.userRepository.findOne({
@@ -162,7 +170,7 @@ export class ReservationsService {
           menuDay: true,
           menuItem: { recipeIngredients: { ingredient: true } },
         },
-        timeslot: true,
+        timeslot: { shift: true },
       },
     });
     return reservations.map((res) => this.mapReservationResponse(res));
@@ -176,7 +184,7 @@ export class ReservationsService {
           menuDay: true,
           menuItem: { recipeIngredients: { ingredient: true } },
         },
-        timeslot: true,
+        timeslot: { shift: true },
       },
     });
     return reservations.map((res) => this.mapReservationResponse(res));
@@ -190,7 +198,7 @@ export class ReservationsService {
           menuDay: true,
           menuItem: { recipeIngredients: { ingredient: true } },
         },
-        timeslot: true,
+        timeslot: { shift: true },
       },
     });
     return entries.map((entry) => this.mapReservationResponse(entry));
@@ -213,6 +221,7 @@ export class ReservationsService {
           }
         : null,
       menuOptionName: res.menuOption?.menuItem?.name,
+      shiftName: res.timeslot?.shift?.name,
       date: res.menuOption?.menuDay?.date,
       ingredients:
         res.menuOption?.menuItem?.recipeIngredients?.map((ri: any) => ({
