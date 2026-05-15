@@ -154,22 +154,73 @@ export class ReservationsService {
     return `TKT-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
   }
 
-  async findAll(companyId: number): Promise<Reservation[]> {
-    return TenantAwareRepository.findAllByTenant(this.reservationRepository, companyId, {
-      relations: { user: true, menuOption: { menuDay: true }, timeslot: true },
+  async findAll(companyId: number): Promise<any[]> {
+    const reservations = await TenantAwareRepository.findAllByTenant(this.reservationRepository, companyId, {
+      relations: {
+        user: true,
+        menuOption: {
+          menuDay: true,
+          menuItem: { recipeIngredients: { ingredient: true } },
+        },
+        timeslot: true,
+      },
     });
+    return reservations.map((res) => this.mapReservationResponse(res));
   }
 
-  async findMyReservations(userId: number, companyId: number): Promise<Reservation[]> {
-    return this.reservationRepository.find({
+  async findMyReservations(userId: number, companyId: number): Promise<any[]> {
+    const reservations = await this.reservationRepository.find({
       where: { userId, companyId },
-      relations: { menuOption: { menuDay: true }, timeslot: true },
+      relations: {
+        menuOption: {
+          menuDay: true,
+          menuItem: { recipeIngredients: { ingredient: true } },
+        },
+        timeslot: true,
+      },
     });
+    return reservations.map((res) => this.mapReservationResponse(res));
   }
 
-  async findWaitlistEntries(companyId: number): Promise<WaitingListEntry[]> {
-    return TenantAwareRepository.findAllByTenant(this.waitlistRepository, companyId, {
-      relations: { user: true, menuOption: { menuDay: true }, timeslot: true },
+  async findWaitlistEntries(companyId: number): Promise<any[]> {
+    const entries = await TenantAwareRepository.findAllByTenant(this.waitlistRepository, companyId, {
+      relations: {
+        user: true,
+        menuOption: {
+          menuDay: true,
+          menuItem: { recipeIngredients: { ingredient: true } },
+        },
+        timeslot: true,
+      },
     });
+    return entries.map((entry) => this.mapReservationResponse(entry));
+  }
+
+  private mapReservationResponse(res: any) {
+    return {
+      ...res,
+      user: res.user
+        ? {
+            id: res.user.id,
+            name: `${res.user.firstName || ''} ${res.user.lastName || ''}`.trim(),
+            firstName: res.user.firstName,
+            lastName: res.user.lastName,
+            email: res.user.email,
+            username: res.user.username,
+            companyId: res.user.companyId,
+            role: res.user.role,
+            isActive: res.user.isActive,
+          }
+        : null,
+      menuOptionName: res.menuOption?.menuItem?.name,
+      date: res.menuOption?.menuDay?.date,
+      ingredients:
+        res.menuOption?.menuItem?.recipeIngredients?.map((ri: any) => ({
+          id: ri.ingredient?.id,
+          name: ri.ingredient?.name,
+          quantity: ri.quantity,
+          unit: ri.ingredient?.unit,
+        })) || [],
+    };
   }
 }
