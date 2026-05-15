@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { TenantAwareRepository } from 'src/common/repository/tenant-aware.repository';
@@ -25,6 +25,11 @@ import { PurchaseOrderItem } from 'src/modules/purchases/entities/purchase-order
 import { Supplier } from 'src/modules/suppliers/entities/supplier.entity';
 import { PurchaseOrderStatus } from 'src/modules/purchases/enums/purchase-order-status.enum';
 
+import { StockMovement } from 'src/modules/stock/entities/stock-movement.entity';
+import { MovementType } from 'src/modules/stock/enums/enums';
+import { UpdatePickedQuantityDto } from '../dto/update-picked-quantity.dto';
+import { User } from 'src/modules/users/entities/user.entity';
+
 @Injectable()
 export class ProductionService {
   private readonly logger = new Logger(ProductionService.name);
@@ -47,7 +52,9 @@ export class ProductionService {
     @InjectRepository(PickingList)
     private readonly pickingListRepository: Repository<PickingList>,
     @InjectRepository(PickingListItem)
-    private readonly pickingListItemRepository: Repository<PickingListItem>, // PickingListItem doesn't extend BaseTenantEntity directly, its parent PickingList does
+    private readonly pickingListItemRepository: Repository<PickingListItem>,
+    @InjectRepository(StockMovement)
+    private readonly stockMovementRepository: Repository<StockMovement>,
     @InjectRepository(PurchaseOrder)
     private readonly purchaseOrderRepository: Repository<PurchaseOrder>, // For JIT purchase orders
     @InjectRepository(PurchaseOrderItem)
@@ -283,44 +290,108 @@ export class ProductionService {
     }
 
     // 5. Create draft Purchase Orders
+    if (purchaseRequests.length > 0) {
+      const defaultSupplier = await TenantAwareRepository.findAllByTenant(
+        this.supplierRepository,
+        companyId,
+        { take: 1 },
+      );
+
+      if (defaultSupplier.length === 0) {
+        this.logger.warn(
+          `No supplier found for company ${companyId}. Skipping creation of JIT purchase orders.`,
+        );
+      } else {
+        const purchaseOrder = this.purchaseOrderRepository.create({
+          companyId,
+          orderDate: new Date(),
+          status: PurchaseOrderStatus.PENDING,
+          supplier: defaultSupplier[0],
+          items: purchaseRequests.map((req) =>
+            this.purchaseOrderItemRepository.create({
+              ingredient: req.ingredient,
+              quantity: req.quantity,
+            }),
+          ),
+        });
+        await this.purchaseOrderRepository.save(purchaseOrder);
+        this.logger.log(
+          `JIT Purchase Order (ID: ${purchaseOrder.id}) created for company ${companyId} with ${purchaseRequests.length} items.`,
+        );
+      }
+    }
+
+    this.logger.log(
+      `Production details processing completed for company ${companyId} on ${targetDate}.`,
+    );
+  }
+
   public async syncPickingListForShift(
     companyId: number,
     targetDate: string,
     shiftId: number,
     cachedMealShifts?: MealShift[],
     cachedReservations?: Reservation[],
-  ) {
+  ): Promise<Map<number, { quantity: number; ingredient: Ingredient }>> {
     const consolidatedIngredients = new Map<
       number,
       { quantity: number; ingredient: Ingredient }
     >();
 
     // 1. Filter data for this specific shift
-    const msForShift = (cachedMealShifts || []).filter((ms) => ms.shiftId === shiftId);
-    const resForShift = (cachedReservations || []).filter((res) => res.timeslot.shiftId === shiftId);
+    const msForShift = (cachedMealShifts || []).filter(
+      (ms) => ms.shiftId === shiftId,
+    );
+    const resForShift = (cachedReservations || []).filter(
+      (res) => res.timeslot.shiftId === shiftId,
+    );
 
     // If no cache provided, fetch them (for real-time individual sync)
     if (!cachedMealShifts && !cachedReservations) {
-      const allMs = await TenantAwareRepository.findAllByTenant(this.mealShiftRepository, companyId, {
-        relations: { menuItem: { recipeIngredients: { ingredient: true } } },
-      });
-      msForShift.push(...allMs.filter(ms => ms.shiftId === shiftId && this.isMealShiftActiveForDate(ms, new Date(targetDate)) && ms.quantityProduced > 0));
-
-      const allRes = await TenantAwareRepository.findAllByTenant(this.reservationRepository, companyId, {
-        where: {
-          status: ReservationStatus.CONFIRMED,
-          timeslot: { shiftId },
-          menuOption: { menuDay: { date: targetDate as any } },
+      const allMs = await TenantAwareRepository.findAllByTenant(
+        this.mealShiftRepository,
+        companyId,
+        {
+          relations: { menuItem: { recipeIngredients: { ingredient: true } } },
         },
-        relations: { timeslot: true, menuOption: { menuItem: { recipeIngredients: { ingredient: true } } } },
-      });
+      );
+      msForShift.push(
+        ...allMs.filter(
+          (ms) =>
+            ms.shiftId === shiftId &&
+            this.isMealShiftActiveForDate(ms, new Date(targetDate)) &&
+            ms.quantityProduced > 0,
+        ),
+      );
+
+      const allRes = await TenantAwareRepository.findAllByTenant(
+        this.reservationRepository,
+        companyId,
+        {
+          where: {
+            status: ReservationStatus.CONFIRMED,
+            timeslot: { shiftId },
+            menuOption: { menuDay: { date: targetDate as any } },
+          },
+          relations: {
+            timeslot: true,
+            menuOption: {
+              menuItem: { recipeIngredients: { ingredient: true } },
+            },
+          },
+        },
+      );
       resForShift.push(...allRes);
     }
 
     // 2. Consolidate MealShifts
     for (const ms of msForShift) {
       for (const ri of ms.menuItem.recipeIngredients) {
-        this.addIngredientToConsolidation(consolidatedIngredients, ri.ingredient, ri.quantity * ms.quantityProduced);
+        this.addIngredientToConsolidation(
+          consolidatedIngredients,
+          ri.ingredient,
+          ri.quantity * ms.quantityProduced,
+        );
       }
     }
 
@@ -329,7 +400,11 @@ export class ProductionService {
       const menuItem = res.menuOption?.menuItem;
       if (!menuItem?.recipeIngredients) continue;
       for (const ri of menuItem.recipeIngredients) {
-        this.addIngredientToConsolidation(consolidatedIngredients, ri.ingredient, ri.quantity);
+        this.addIngredientToConsolidation(
+          consolidatedIngredients,
+          ri.ingredient,
+          ri.quantity,
+        );
       }
     }
 
@@ -341,7 +416,7 @@ export class ProductionService {
 
     if (consolidatedIngredients.size === 0) {
       if (pickingList) await this.pickingListRepository.remove(pickingList);
-      return;
+      return consolidatedIngredients;
     }
 
     if (!pickingList) {
@@ -357,7 +432,9 @@ export class ProductionService {
     // 5. Update Items
     const newItems: PickingListItem[] = [];
     for (const [ingredientId, data] of consolidatedIngredients.entries()) {
-      let item = pickingList.items?.find((i) => i.ingredientId === ingredientId);
+      let item = pickingList.items?.find(
+        (i) => i.ingredientId === ingredientId,
+      );
       if (item) {
         item.requiredQuantity = data.quantity;
       } else {
@@ -371,36 +448,11 @@ export class ProductionService {
     pickingList.items = newItems;
 
     await this.pickingListRepository.save(pickingList);
-    this.logger.log(`Synced PickingList for company ${companyId}, date ${targetDate}, shift ${shiftId}`);
+    this.logger.log(
+      `Synced PickingList for company ${companyId}, date ${targetDate}, shift ${shiftId}`,
+    );
 
     return consolidatedIngredients;
-  }
-
-    // 5. Create draft Purchase Orders
-    if (purchaseRequests.length > 0) {
-      const defaultSupplier = await TenantAwareRepository.findAllByTenant(this.supplierRepository, companyId, { take: 1 });
-
-      if (defaultSupplier.length === 0) {
-        this.logger.warn(`No supplier found for company ${companyId}. Skipping creation of JIT purchase orders.`);
-      } else {
-        const purchaseOrder = this.purchaseOrderRepository.create({
-          companyId,
-          orderDate: new Date(),
-          status: PurchaseOrderStatus.PENDING, // DRAFT is also an option, but PENDING seems more appropriate for JIT
-          supplier: defaultSupplier[0],
-          items: purchaseRequests.map(req => this.purchaseOrderItemRepository.create({
-            ingredient: req.ingredient, // Pass the full ingredient object
-            quantity: req.quantity,
-          })),
-        });
-        await this.purchaseOrderRepository.save(purchaseOrder);
-        this.logger.log(`JIT Purchase Order (ID: ${purchaseOrder.id}) created for company ${companyId} with ${purchaseRequests.length} items.`);
-      }
-    }
-
-    this.logger.log(
-      `Production details processing completed for company ${companyId} on ${targetDate}.`,
-    );
   }
 
   async getPickingListByDate(
@@ -441,6 +493,91 @@ export class ProductionService {
     await this._processProductionForCompany(companyId, date);
     this.logger.log(
       `Manual production plan for company ${companyId} on ${date} completed.`,
+    );
+  }
+
+  async updatePickedQuantity(
+    companyId: number,
+    itemId: number,
+    updateDto: UpdatePickedQuantityDto,
+  ): Promise<PickingListItem> {
+    const item = await this.pickingListItemRepository.findOne({
+      where: { id: itemId, pickingList: { companyId } },
+      relations: { pickingList: true },
+    });
+
+    if (!item) {
+      throw new NotFoundException(`PickingListItem with ID ${itemId} not found`);
+    }
+
+    if (item.pickingList.status === PickingListStatus.COMPLETED) {
+      throw new BadRequestException('Cannot update a completed picking list');
+    }
+
+    item.pickedQuantity = updateDto.pickedQuantity;
+
+    // Update parent status if it was PENDING
+    if (item.pickingList.status === PickingListStatus.PENDING) {
+      item.pickingList.status = PickingListStatus.IN_PROGRESS;
+      await this.pickingListRepository.save(item.pickingList);
+    }
+
+    return this.pickingListItemRepository.save(item);
+  }
+
+  async finalizePickingList(
+    companyId: number,
+    id: number,
+    user: User,
+  ): Promise<PickingList> {
+    const list = await this.pickingListRepository.findOne({
+      where: { id, companyId },
+      relations: { items: { ingredient: true } },
+    });
+
+    if (!list) {
+      throw new NotFoundException(`PickingList with ID ${id} not found`);
+    }
+
+    if (list.status === PickingListStatus.COMPLETED) {
+      return list;
+    }
+
+    // 1. Deduct Stock (Option B)
+    await this.deductStockForPickingList(list, user);
+
+    // 2. Mark as COMPLETED
+    list.status = PickingListStatus.COMPLETED;
+    return this.pickingListRepository.save(list);
+  }
+
+  private async deductStockForPickingList(list: PickingList, user: User) {
+    for (const item of list.items) {
+      if (item.pickedQuantity <= 0) continue;
+
+      // Atomic decrement of ingredient stock
+      await this.ingredientRepository.decrement(
+        { id: item.ingredientId },
+        'quantityInStock',
+        item.pickedQuantity,
+      );
+
+      // Create Stock Movement record
+      const movement = this.stockMovementRepository.create({
+        ingredient: item.ingredient,
+        quantity: item.pickedQuantity,
+        unit: item.ingredient.unit,
+        movementType: MovementType.OUT,
+        reason: 'production',
+        relatedTicketId: `PICK-${list.id}`, // Traceability back to the picking list
+        performedBy: user,
+        companyId: list.companyId,
+      });
+
+      await this.stockMovementRepository.save(movement);
+    }
+    this.logger.log(
+      `Stock deducted for PickingList ${list.id} (Company ${list.companyId})`,
     );
   }
 

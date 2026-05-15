@@ -5,6 +5,9 @@ import {
   HttpStatus,
   Param,
   Post,
+  Body,
+  Patch,
+  ParseIntPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -13,19 +16,25 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/modules/auth/guards/roles.guard';
+import { Roles } from 'src/modules/auth/decorators/roles.decorators';
 import { TenantGuard } from 'src/common/guards/tenant-guard';
 import { Tenant } from 'src/common/decorators/tenant-decorator';
 import { ProductionService } from './production.service';
 import { PickingList } from '../entities/picking-list.entity';
+import { UpdatePickedQuantityDto } from '../dto/update-picked-quantity.dto';
+import { CurrentUser } from 'src/modules/auth/decorators/current-user.decorator';
+import { User } from 'src/modules/users/entities/user.entity';
 
 @ApiTags('Production')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, TenantGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, TenantGuard)
 @Controller('production')
 export class ProductionController {
   constructor(private readonly productionService: ProductionService) {}
 
   @Get('picking-lists/:date')
+  @Roles('kitchen', 'kitchen_admin', 'super_admin', 'company_admin')
   @ApiOperation({
     summary: 'Retrieve picking list for a specific date and current tenant',
   })
@@ -50,6 +59,7 @@ export class ProductionController {
   }
 
   @Post('trigger-plan-manual/:date')
+  @Roles('kitchen_admin', 'super_admin', 'company_admin')
   @ApiOperation({
     summary:
       'Manually trigger the production plan generation for a specific date (Admin only)',
@@ -71,5 +81,29 @@ export class ProductionController {
     return {
       message: `Manual production plan for ${date} triggered for company ${companyId}.`,
     };
+  }
+
+  @Patch('picking-lists/items/:itemId')
+  @Roles('kitchen', 'kitchen_admin', 'super_admin')
+  @ApiOperation({ summary: 'Update picked quantity for a specific item' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Item updated successfully.' })
+  async updatePickedQuantity(
+    @Param('itemId', ParseIntPipe) itemId: number,
+    @Body() updateDto: UpdatePickedQuantityDto,
+    @Tenant() companyId: number,
+  ) {
+    return this.productionService.updatePickedQuantity(companyId, itemId, updateDto);
+  }
+
+  @Post('picking-lists/:id/finalize')
+  @Roles('kitchen', 'kitchen_admin', 'super_admin')
+  @ApiOperation({ summary: 'Finalize picking list and deduct stock' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'List finalized and stock deducted.' })
+  async finalizePickingList(
+    @Param('id', ParseIntPipe) id: number,
+    @Tenant() companyId: number,
+    @CurrentUser() user: User,
+  ) {
+    return this.productionService.finalizePickingList(companyId, id, user);
   }
 }
