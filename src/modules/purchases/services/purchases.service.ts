@@ -13,12 +13,16 @@ import { MovementType } from 'src/modules/stock/enums/enums';
 import { IngredientService } from 'src/modules/stock/services/ingredient.service';
 import { MenuItemService } from 'src/modules/stock/services/menu-item.service';
 import { SuppliersService } from 'src/modules/suppliers/services/suppliers.service';
+import { PurchaseOrderItem } from '../entities/purchase-order-item.entity';
+import { Ingredient } from 'src/modules/stock/entities/ingredient.entity';
 
 @Injectable()
 export class PurchasesService {
   constructor(
     @InjectRepository(PurchaseOrder)
     private readonly purchaseOrderRepo: Repository<PurchaseOrder>,
+    @InjectRepository(PurchaseOrderItem)
+    private readonly purchaseOrderItemRepo: Repository<PurchaseOrderItem>,
     private readonly stockService: StockService,
     private readonly ingredientService: IngredientService,
     private readonly menuItemService: MenuItemService,
@@ -154,6 +158,54 @@ export class PurchasesService {
       throw err;
     } finally {
       await queryRunner.release();
+    }
+  }
+
+  async createDraftPurchaseOrders(
+    shortages: { ingredient: Ingredient; quantity: number }[],
+    companyId: number,
+  ): Promise<void> {
+    const shortagesBySupplier = new Map<
+      number | string,
+      { ingredient: Ingredient; quantity: number }[]
+    >();
+
+    for (const shortage of shortages) {
+      const supplierId = shortage.ingredient.defaultSupplierId || 'default';
+      if (!shortagesBySupplier.has(supplierId)) {
+        shortagesBySupplier.set(supplierId, []);
+      }
+      shortagesBySupplier.get(supplierId).push(shortage);
+    }
+
+    for (const [supplierId, items] of shortagesBySupplier.entries()) {
+      let supplier = null;
+      if (supplierId !== 'default') {
+        supplier = { id: supplierId as number };
+      } else {
+        const suppliers = await this.suppliersService.findAll(companyId);
+        if (suppliers.length > 0) {
+          supplier = suppliers[0];
+        }
+      }
+
+      if (!supplier) continue;
+
+      const purchaseOrder = this.purchaseOrderRepo.create({
+        companyId,
+        orderDate: new Date(),
+        status: PurchaseOrderStatus.PENDING,
+        supplier,
+        items: items.map((item) =>
+          this.purchaseOrderItemRepo.create({
+            ingredient: item.ingredient,
+            quantity: item.quantity,
+            companyId,
+          }),
+        ),
+      });
+
+      await this.purchaseOrderRepo.save(purchaseOrder);
     }
   }
 }
