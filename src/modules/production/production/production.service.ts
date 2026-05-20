@@ -20,13 +20,7 @@ import {
   PickingListStatus,
 } from '../entities/picking-list.entity';
 import { PickingListItem } from '../entities/picking-list-item.entity';
-import { PurchaseOrder } from 'src/modules/purchases/entities/purchase-order.entity'; // Use existing PurchaseOrder entity
-import { PurchaseOrderItem } from 'src/modules/purchases/entities/purchase-order-item.entity';
-import { Supplier } from 'src/modules/suppliers/entities/supplier.entity';
-import { PurchaseOrderStatus } from 'src/modules/purchases/enums/purchase-order-status.enum';
 
-import { StockMovement } from 'src/modules/stock/entities/stock-movement.entity';
-import { MovementType } from 'src/modules/stock/enums/enums';
 import { UpdatePickedQuantityDto } from '../dto/update-picked-quantity.dto';
 import { User } from 'src/modules/users/entities/user.entity';
 import { StockService } from 'src/modules/stock/services/stock.service';
@@ -55,14 +49,6 @@ export class ProductionService {
     private readonly pickingListRepository: Repository<PickingList>,
     @InjectRepository(PickingListItem)
     private readonly pickingListItemRepository: Repository<PickingListItem>,
-    @InjectRepository(StockMovement)
-    private readonly stockMovementRepository: Repository<StockMovement>,
-    @InjectRepository(PurchaseOrder)
-    private readonly purchaseOrderRepository: Repository<PurchaseOrder>, // For JIT purchase orders
-    @InjectRepository(PurchaseOrderItem)
-    private readonly purchaseOrderItemRepository: Repository<PurchaseOrderItem>,
-    @InjectRepository(Supplier)
-    private readonly supplierRepository: Repository<Supplier>, // To find a default supplier for JIT orders
     private readonly stockService: StockService,
     private readonly purchasesService: PurchasesService,
   ) {}
@@ -592,29 +578,18 @@ export class ProductionService {
     for (const item of list.items) {
       if (item.pickedQuantity <= 0) continue;
 
-      // Atomic decrement of ingredient stock
-      await this.ingredientRepository.decrement(
-        { id: item.ingredientId },
-        'quantityInStock',
+      // Use StockService for FIFO deduction and movement registration
+      await this.stockService.deductStockFIFO(
+        item.ingredientId,
         item.pickedQuantity,
+        list.companyId,
+        user.id,
+        'production',
+        `PICK-${list.id}`, // Traceability back to the picking list
       );
-
-      // Create Stock Movement record
-      const movement = this.stockMovementRepository.create({
-        ingredient: item.ingredient,
-        quantity: item.pickedQuantity,
-        unit: item.ingredient.unit,
-        movementType: MovementType.OUT,
-        reason: 'production',
-        relatedTicketId: `PICK-${list.id}`, // Traceability back to the picking list
-        performedBy: user,
-        companyId: list.companyId,
-      });
-
-      await this.stockMovementRepository.save(movement);
     }
     this.logger.log(
-      `Stock deducted for PickingList ${list.id} (Company ${list.companyId})`,
+      `Stock deducted (FIFO) for PickingList ${list.id} (Company ${list.companyId})`,
     );
   }
 

@@ -10,11 +10,7 @@ import { Company } from 'src/modules/companies/entities/company.entity';
 import { Ingredient } from 'src/modules/stock/entities/ingredient.entity';
 import { MenuItems } from 'src/modules/stock/entities/menu-items.entity';
 import { RecipeIngredient } from 'src/modules/stock/entities/recipe-ingredient.entity';
-import { StockMovement } from 'src/modules/stock/entities/stock-movement.entity';
-import { PurchaseOrder } from 'src/modules/purchases/entities/purchase-order.entity';
-import { PurchaseOrderItem } from 'src/modules/purchases/entities/purchase-order-item.entity';
 import { ProductionController } from './production/production.controller';
-import { Supplier } from '../suppliers/entities/supplier.entity';
 import { StockModule } from '../stock/stock.module';
 import { PurchasesModule } from '../purchases/purchases.module';
 
@@ -30,10 +26,6 @@ import { PurchasesModule } from '../purchases/purchases.module';
       Ingredient,
       MenuItems,
       RecipeIngredient,
-      StockMovement,
-      PurchaseOrder,
-      PurchaseOrderItem,
-      Supplier
     ]),
     StockModule,
     PurchasesModule,
