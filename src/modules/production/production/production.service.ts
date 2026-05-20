@@ -259,69 +259,61 @@ export class ProductionService {
 
     // 3. JIT Logic and Stock Check
     const purchaseRequests: { ingredient: Ingredient; quantity: number }[] = [];
+    const ingredientsWithShortage = new Set<number>();
 
     for (const [ingredientId, data] of dayConsolidatedIngredients.entries()) {
       const { quantity: totalRequiredQuantity, ingredient } = data;
 
-      const currentIngredient: Ingredient =
-        await TenantAwareRepository.findOneByTenant(
-          this.ingredientRepository,
-          ingredient.id,
-          companyId,
-          { relations: { lots: true } },
-        );
+      const quantityInStock = await this.stockService.calculateTrueStock(
+        ingredientId,
+        companyId,
+      );
 
-      let quantityInStock = 0;
-      if (currentIngredient?.lots) {
-        quantityInStock = currentIngredient.lots.reduce(
-          (sum, lot) => sum + lot.quantity,
-          0,
-        );
-      }
-
-      if (
-        currentIngredient.isFresh &&
-        totalRequiredQuantity > quantityInStock
-      ) {
+      if (totalRequiredQuantity > quantityInStock) {
         purchaseRequests.push({
-          ingredient: currentIngredient,
+          ingredient: data.ingredient, // Use original ingredient with supplier info if possible
           quantity: totalRequiredQuantity - quantityInStock,
         });
+        ingredientsWithShortage.add(ingredientId);
         this.logger.warn(
-          `JIT: Company ${companyId} needs to purchase ${totalRequiredQuantity - quantityInStock} of fresh ingredient ${currentIngredient.name}.`,
+          `JIT: Company ${companyId} needs to purchase ${totalRequiredQuantity - quantityInStock} of ingredient ${ingredient.name}.`,
         );
       }
     }
 
-    // 5. Create draft Purchase Orders
+    // 4. Create draft Purchase Orders using PurchasesService
     if (purchaseRequests.length > 0) {
-      const defaultSupplier = await TenantAwareRepository.findAllByTenant(
-        this.supplierRepository,
-        companyId,
-        { take: 1 },
+      // We need to fetch ingredients again to get defaultSupplierId
+      const ingredientsToOrder = await Promise.all(
+        purchaseRequests.map(async (req) => {
+          const ingredient = await TenantAwareRepository.findOneByTenant(
+            this.ingredientRepository,
+            req.ingredient.id,
+            companyId,
+          );
+          return { ingredient, quantity: req.quantity };
+        }),
       );
 
-      if (defaultSupplier.length === 0) {
-        this.logger.warn(
-          `No supplier found for company ${companyId}. Skipping creation of JIT purchase orders.`,
+      await this.purchasesService.createDraftPurchaseOrders(
+        ingredientsToOrder,
+        companyId,
+      );
+    }
+
+    // 5. Update PickingLists with hasStockShortage flag
+    for (const shiftId of shiftIds) {
+      const pickingList = await this.pickingListRepository.findOne({
+        where: { companyId, date: targetDate as any, shiftId },
+        relations: { items: true },
+      });
+
+      if (pickingList) {
+        const hasShortage = pickingList.items.some((item) =>
+          ingredientsWithShortage.has(item.ingredientId),
         );
-      } else {
-        const purchaseOrder = this.purchaseOrderRepository.create({
-          companyId,
-          orderDate: new Date(),
-          status: PurchaseOrderStatus.PENDING,
-          supplier: defaultSupplier[0],
-          items: purchaseRequests.map((req) =>
-            this.purchaseOrderItemRepository.create({
-              ingredient: req.ingredient,
-              quantity: req.quantity,
-            }),
-          ),
-        });
-        await this.purchaseOrderRepository.save(purchaseOrder);
-        this.logger.log(
-          `JIT Purchase Order (ID: ${purchaseOrder.id}) created for company ${companyId} with ${purchaseRequests.length} items.`,
-        );
+        pickingList.hasStockShortage = hasShortage;
+        await this.pickingListRepository.save(pickingList);
       }
     }
 
@@ -435,6 +427,8 @@ export class ProductionService {
 
     // 5. Update Items
     const newItems: PickingListItem[] = [];
+    let hasShortage = false;
+
     for (const [ingredientId, data] of consolidatedIngredients.entries()) {
       let item = pickingList.items?.find(
         (i) => i.ingredientId === ingredientId,
@@ -447,9 +441,20 @@ export class ProductionService {
           requiredQuantity: data.quantity,
         });
       }
+
+      // Check for shortage
+      const quantityInStock = await this.stockService.calculateTrueStock(
+        ingredientId,
+        companyId,
+      );
+      if (data.quantity > quantityInStock) {
+        hasShortage = true;
+      }
+
       newItems.push(item);
     }
     pickingList.items = newItems;
+    pickingList.hasStockShortage = hasShortage;
 
     await this.pickingListRepository.save(pickingList);
     this.logger.log(
