@@ -15,6 +15,8 @@ import { PurchaseOrder } from 'src/modules/purchases/entities/purchase-order.ent
 import { PurchaseOrderItem } from 'src/modules/purchases/entities/purchase-order-item.entity';
 import { ProductionController } from './production/production.controller';
 import { Supplier } from '../suppliers/entities/supplier.entity';
+import { StockModule } from '../stock/stock.module';
+import { PurchasesModule } from '../purchases/purchases.module';
 
 @Module({
   imports: [
@@ -33,6 +35,8 @@ import { Supplier } from '../suppliers/entities/supplier.entity';
       PurchaseOrderItem,
       Supplier
     ]),
+    StockModule,
+    PurchasesModule,
   ],
   providers: [ProductionService],
   exports: [ProductionService],

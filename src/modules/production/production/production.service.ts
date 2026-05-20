@@ -29,6 +29,8 @@ import { StockMovement } from 'src/modules/stock/entities/stock-movement.entity'
 import { MovementType } from 'src/modules/stock/enums/enums';
 import { UpdatePickedQuantityDto } from '../dto/update-picked-quantity.dto';
 import { User } from 'src/modules/users/entities/user.entity';
+import { StockService } from 'src/modules/stock/services/stock.service';
+import { PurchasesService } from 'src/modules/purchases/services/purchases.service';
 
 @Injectable()
 export class ProductionService {
@@ -61,6 +63,8 @@ export class ProductionService {
     private readonly purchaseOrderItemRepository: Repository<PurchaseOrderItem>,
     @InjectRepository(Supplier)
     private readonly supplierRepository: Repository<Supplier>, // To find a default supplier for JIT orders
+    private readonly stockService: StockService,
+    private readonly purchasesService: PurchasesService,
   ) {}
 
       private isMealShiftActiveForDate(
