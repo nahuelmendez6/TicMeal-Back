@@ -6,6 +6,7 @@ import {
   Index,
   ManyToOne,
   ManyToMany,
+  JoinColumn,
 } from 'typeorm';
 
 import { BaseTenantEntity } from 'src/common/entities/base-tenant.entity';
@@ -17,6 +18,7 @@ import { IngredientCategory } from './ingredient-category.entity';
 import { IngredientLot } from './ingredient-lot.entity';
 import { Observation } from 'src/modules/users/entities/observation.entity';
 import { NutritionalInfo } from '../dto/nutritional-info.dto';
+import { Supplier } from 'src/modules/suppliers/entities/supplier.entity';
 
 /**
  * Ingredient
@@ -189,6 +191,13 @@ export class Ingredient extends BaseTenantEntity {
 
   @Column({ type: 'boolean', default: false })
   isFresh: boolean;
+
+  @ManyToOne(() => Supplier, { nullable: true })
+  @JoinColumn({ name: 'defaultSupplierId' })
+  defaultSupplier: Supplier;
+
+  @Column({ name: 'defaultSupplierId', nullable: true })
+  defaultSupplierId: number;
 
   @ManyToMany(
     () => Observation,

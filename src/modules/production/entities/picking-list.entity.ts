@@ -26,6 +26,9 @@ export class PickingList extends BaseTenantEntity {
   })
   status: PickingListStatus;
 
+  @Column({ type: 'boolean', default: false })
+  hasStockShortage: boolean;
+
   @ManyToOne(() => Shift, { nullable: true })
   @JoinColumn({ name: 'shift_id' })
   shift: Shift;
