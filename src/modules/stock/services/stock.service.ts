@@ -198,6 +198,75 @@ export class StockService {
     });
   }
 
+  async calculateTrueStock(
+    ingredientId: number,
+    companyId: number,
+  ): Promise<number> {
+    const lots = await this.ingredientLotRepo.find({
+      where: { ingredient: { id: ingredientId }, companyId },
+    });
+    return lots.reduce((sum, lot) => sum + lot.quantity, 0);
+  }
+
+  async deductStockFIFO(
+    ingredientId: number,
+    quantity: number,
+    companyId: number,
+    userId: number,
+    reason: string,
+    relatedTicketId?: string,
+  ): Promise<void> {
+    await this.dataSource.transaction(async (manager) => {
+      const ingredient = await manager.findOneBy(Ingredient, {
+        id: ingredientId,
+        companyId,
+      });
+      if (!ingredient) throw new NotFoundException('Ingrediente no encontrado.');
+
+      const lots = await manager.find(IngredientLot, {
+        where: { ingredient: { id: ingredientId }, companyId },
+      });
+
+      const activeLots = lots
+        .filter((l) => l.quantity > 0)
+        .sort((a, b) => a.id - b.id); // FIFO: oldest lot (smallest ID) first
+
+      let remainingToDeduct = quantity;
+
+      for (const lot of activeLots) {
+        if (remainingToDeduct <= 0) break;
+
+        const amountFromLot = Math.min(lot.quantity, remainingToDeduct);
+        lot.quantity -= amountFromLot;
+        await manager.save(lot);
+
+        const movement = manager.create(StockMovement, {
+          ingredient,
+          ingredientLot: lot,
+          quantity: amountFromLot,
+          movementType: MovementType.OUT,
+          reason,
+          relatedTicketId,
+          performedBy: { id: userId } as User,
+          companyId,
+          unit: ingredient.unit,
+          stockAfter: lot.quantity,
+        });
+        await manager.save(movement);
+
+        remainingToDeduct -= amountFromLot;
+      }
+
+      if (remainingToDeduct > 0) {
+        // This should probably be handled by the caller checking stock before calling this,
+        // but as a fallback/safety measure:
+        throw new BadRequestException(
+          `Stock insuficiente para el ingrediente ${ingredient.name}. Faltante: ${remainingToDeduct}`,
+        );
+      }
+    });
+  }
+
   async registerMovement(
     createDto: CreateStockMovementDto,
     companyId: number,
