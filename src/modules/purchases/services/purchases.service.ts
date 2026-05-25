@@ -171,9 +171,18 @@ export class PurchasesService {
     pickingListId?: number,
   ): Promise<void> {
     for (const shortage of shortages) {
-      // Find existing PENDING suggestion for this ingredient and company
-      // If pickingListId is provided, we look for that specific one. 
-      // If not, we look for one without pickingListId.
+      if (shortage.quantity <= 0) {
+        // If no shortage anymore, remove any pending suggestion for this context
+        await this.purchaseSuggestionRepo.delete({
+          ingredientId: shortage.ingredient.id,
+          companyId,
+          status: PurchaseSuggestionStatus.PENDING,
+          pickingListId: pickingListId || null,
+        } as any);
+        continue;
+      }
+
+      // Find existing PENDING suggestion
       let suggestion = await this.purchaseSuggestionRepo.findOne({
         where: {
           ingredientId: shortage.ingredient.id,

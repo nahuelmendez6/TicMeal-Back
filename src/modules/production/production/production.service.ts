@@ -9,7 +9,7 @@ import {
 import { Reservation, ReservationStatus } from 'src/modules/reservations/entities/reservation.entity';
 import { MealShift, Periodicity } from 'src/modules/stock/entities/meal-shift.entity';
 import { Company } from 'src/modules/companies/entities/company.entity';
-import { Repository } from 'typeorm';
+import { Repository, Not, In } from 'typeorm';
 import { addDays, format, isSameDay, getDay } from 'date-fns';
 import { isWithinInterval } from 'date-fns/isWithinInterval'
 import { Ingredient } from 'src/modules/stock/entities/ingredient.entity';
@@ -267,27 +267,8 @@ export class ProductionService {
       }
     }
 
-    // 4. Create draft Purchase Orders using PurchasesService
-    if (purchaseRequests.length > 0) {
-      // We need to fetch ingredients again to get defaultSupplierId
-      const ingredientsToOrder = await Promise.all(
-        purchaseRequests.map(async (req) => {
-          const ingredient = await TenantAwareRepository.findOneByTenant(
-            this.ingredientRepository,
-            req.ingredient.id,
-            companyId,
-          );
-          return { ingredient, quantity: req.quantity };
-        }),
-      );
-
-      await this.purchasesService.createPurchaseSuggestions(
-        ingredientsToOrder,
-        companyId,
-      );
-    }
-
     // 5. Update PickingLists with hasStockShortage flag
+    // (This ensures consistency after the full aggregation)
     for (const shiftId of shiftIds) {
       const pickingList = await this.pickingListRepository.findOne({
         where: { companyId, date: targetDate as any, shiftId },
@@ -413,7 +394,8 @@ export class ProductionService {
 
     // 5. Update Items
     const newItems: PickingListItem[] = [];
-    let hasShortage = false;
+    let hasListShortage = false;
+    const shortagesForSuggestions: { ingredient: Ingredient; quantity: number }[] = [];
 
     for (const [ingredientId, data] of consolidatedIngredients.entries()) {
       let item = pickingList.items?.find(
@@ -428,27 +410,79 @@ export class ProductionService {
         });
       }
 
-      // Check for shortage
-      const quantityInStock = await this.stockService.calculateTrueStock(
+      // Check for shortage using AVAILABLE stock (accounting for other lists of the day)
+      const availableStock = await this.calculateAvailableStock(
         ingredientId,
         companyId,
+        targetDate,
+        pickingList.id,
       );
-      item.hasShortage = data.quantity > quantityInStock;
+      
+      item.hasShortage = data.quantity > availableStock;
       if (item.hasShortage) {
-        hasShortage = true;
+        hasListShortage = true;
+        shortagesForSuggestions.push({
+          ingredient: data.ingredient,
+          quantity: data.quantity - availableStock,
+        });
       }
 
       newItems.push(item);
     }
     pickingList.items = newItems;
-    pickingList.hasStockShortage = hasShortage;
+    pickingList.hasStockShortage = hasListShortage;
 
-    await this.pickingListRepository.save(pickingList);
+    const savedPickingList = await this.pickingListRepository.save(pickingList);
+
+    // 6. Update Purchase Suggestions in real-time
+    // This makes suggestions appear on the purchases screen immediately.
+    await this.purchasesService.createPurchaseSuggestions(
+      shortagesForSuggestions,
+      companyId,
+      savedPickingList.id,
+    );
+
     this.logger.log(
       `Synced PickingList for company ${companyId}, date ${targetDate}, shift ${shiftId}`,
     );
 
     return consolidatedIngredients;
+  }
+
+  /**
+   * Calculates "Available" stock for an ingredient on a specific date.
+   * Available = Physical Stock - Committed in other Picking Lists of the same day.
+   */
+  private async calculateAvailableStock(
+    ingredientId: number,
+    companyId: number,
+    date: string,
+    excludePickingListId?: number,
+  ): Promise<number> {
+    const physicalStock = await this.stockService.calculateTrueStock(
+      ingredientId,
+      companyId,
+    );
+
+    // Find other picking lists for the same day that are not completed/cancelled
+    const otherItems = await this.pickingListItemRepository.find({
+      where: {
+        ingredientId,
+        pickingList: {
+          companyId,
+          date: date as any,
+          status: Not(In([PickingListStatus.COMPLETED, PickingListStatus.CANCELLED])),
+          ...(excludePickingListId ? { id: Not(excludePickingListId) } : {}),
+        },
+      },
+    });
+
+    const committed = otherItems.reduce(
+      (sum, item) => sum + item.requiredQuantity,
+      0,
+    );
+
+    return Math.max(0, physicalStock - committed);
   }
 
   async getPickingListByDate(
