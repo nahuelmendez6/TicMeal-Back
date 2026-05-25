@@ -36,16 +36,16 @@ export class ProductionController {
   @Get('picking-lists/:date')
   @Roles('kitchen', 'kitchen_admin', 'super_admin', 'company_admin')
   @ApiOperation({
-    summary: 'Retrieve picking list for a specific date and current tenant',
+    summary: 'Retrieve all picking lists for a specific date and current tenant',
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: 'The picking list for the specified date.',
-    type: PickingList,
+    description: 'The picking lists for the specified date.',
+    type: [PickingList],
   })
   @ApiResponse({
     status: HttpStatus.NOT_FOUND,
-    description: 'Picking list not found for the given date.',
+    description: 'Picking lists not found for the given date.',
   })
   @ApiResponse({
     status: HttpStatus.FORBIDDEN,
@@ -54,7 +54,7 @@ export class ProductionController {
   async getPickingList(
     @Param('date') date: string,
     @Tenant() companyId: number,
-  ): Promise<PickingList> {
+  ): Promise<PickingList[]> {
     return this.productionService.getPickingListByDate(companyId, date);
   }
 

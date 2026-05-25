@@ -488,42 +488,45 @@ export class ProductionService {
   async getPickingListByDate(
     companyId: number,
     date: string,
-  ): Promise<PickingList> {
+  ): Promise<PickingList[]> {
     // Ensure we are comparing just the date part if it comes as ISO
     const dateOnly = date.includes('T') ? date.split('T')[0] : date;
 
-    const pickingList = await TenantAwareRepository.createTenantQueryBuilder(
+    const pickingLists = await TenantAwareRepository.createTenantQueryBuilder(
       this.pickingListRepository,
       companyId,
-      'pickingList',
+      'pickingList'
     )
       .where('pickingList.date = :date', { date: dateOnly })
       .leftJoinAndSelect('pickingList.items', 'items')
       .leftJoinAndSelect('items.ingredient', 'ingredient')
-      .leftJoinAndSelect('ingredient.lots', 'lots') // Load lots to calculate current stock
-      .getOne();
+      .leftJoinAndSelect('ingredient.lots', 'lots')
+      .leftJoinAndSelect('pickingList.shift', 'shift')
+      .getMany();
 
-    if (!pickingList) {
+    if (!pickingLists || pickingLists.length === 0) {
       this.logger.warn(
-        `PickingList not found for company ${companyId} and date ${dateOnly}`,
+        `PickingLists not found for company ${companyId} and date ${dateOnly}`,
       );
       throw new NotFoundException(
-        `PickingList for date ${dateOnly} not found for company ${companyId}.`,
+        `No picking lists found for date ${dateOnly} for company ${companyId}.`,
       );
     }
 
-    // Calculate stock for each item's ingredient
-    if (pickingList.items) {
-      for (const item of pickingList.items) {
-        if (item.ingredient) {
-          item.ingredient.quantityInStock = item.ingredient.lots
-            ? item.ingredient.lots.reduce((sum, lot) => sum + lot.quantity, 0)
-            : 0;
+    // Calculate stock for each item's ingredient in all lists
+    for (const pickingList of pickingLists) {
+      if (pickingList.items) {
+        for (const item of pickingList.items) {
+          if (item.ingredient) {
+            item.ingredient.quantityInStock = item.ingredient.lots
+              ? item.ingredient.lots.reduce((sum, lot) => sum + lot.quantity, 0)
+              : 0;
+          }
         }
       }
     }
 
-    return pickingList;
+    return pickingLists;
   }
 
   async handleProductionPlanManual(
