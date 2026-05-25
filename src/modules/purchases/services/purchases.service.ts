@@ -15,6 +15,8 @@ import { MenuItemService } from 'src/modules/stock/services/menu-item.service';
 import { SuppliersService } from 'src/modules/suppliers/services/suppliers.service';
 import { PurchaseOrderItem } from '../entities/purchase-order-item.entity';
 import { Ingredient } from 'src/modules/stock/entities/ingredient.entity';
+import { PurchaseSuggestion } from '../entities/purchase-suggestion.entity';
+import { PurchaseSuggestionStatus } from '../enums/purchase-suggestion-status.enum';
 
 @Injectable()
 export class PurchasesService {
@@ -23,6 +25,8 @@ export class PurchasesService {
     private readonly purchaseOrderRepo: Repository<PurchaseOrder>,
     @InjectRepository(PurchaseOrderItem)
     private readonly purchaseOrderItemRepo: Repository<PurchaseOrderItem>,
+    @InjectRepository(PurchaseSuggestion)
+    private readonly purchaseSuggestionRepo: Repository<PurchaseSuggestion>,
     private readonly stockService: StockService,
     private readonly ingredientService: IngredientService,
     private readonly menuItemService: MenuItemService,
@@ -161,51 +165,40 @@ export class PurchasesService {
     }
   }
 
-  async createDraftPurchaseOrders(
+  async createPurchaseSuggestions(
     shortages: { ingredient: Ingredient; quantity: number }[],
     companyId: number,
+    pickingListId?: number,
   ): Promise<void> {
-    const shortagesBySupplier = new Map<
-      number | string,
-      { ingredient: Ingredient; quantity: number }[]
-    >();
-
     for (const shortage of shortages) {
-      const supplierId = shortage.ingredient.defaultSupplierId || 'default';
-      if (!shortagesBySupplier.has(supplierId)) {
-        shortagesBySupplier.set(supplierId, []);
-      }
-      shortagesBySupplier.get(supplierId).push(shortage);
-    }
-
-    for (const [supplierId, items] of shortagesBySupplier.entries()) {
-      let supplier = null;
-      if (supplierId !== 'default') {
-        supplier = { id: supplierId as number };
-      } else {
-        const suppliers = await this.suppliersService.findAll(companyId);
-        if (suppliers.length > 0) {
-          supplier = suppliers[0];
-        }
-      }
-
-      if (!supplier) continue;
-
-      const purchaseOrder = this.purchaseOrderRepo.create({
-        companyId,
-        orderDate: new Date(),
-        status: PurchaseOrderStatus.PENDING,
-        supplier,
-        items: items.map((item) =>
-          this.purchaseOrderItemRepo.create({
-            ingredient: item.ingredient,
-            quantity: item.quantity,
-            companyId,
-          }),
-        ),
+      // Find existing PENDING suggestion for this ingredient and company
+      // If pickingListId is provided, we look for that specific one. 
+      // If not, we look for one without pickingListId.
+      let suggestion = await this.purchaseSuggestionRepo.findOne({
+        where: {
+          ingredientId: shortage.ingredient.id,
+          companyId,
+          status: PurchaseSuggestionStatus.PENDING,
+          pickingListId: pickingListId || null,
+        } as any,
       });
 
-      await this.purchaseOrderRepo.save(purchaseOrder);
+      if (suggestion) {
+        // Update quantity if it changed
+        suggestion.quantity = shortage.quantity;
+        suggestion.supplierId = shortage.ingredient.defaultSupplierId;
+        await this.purchaseSuggestionRepo.save(suggestion);
+      } else {
+        suggestion = this.purchaseSuggestionRepo.create({
+          ingredientId: shortage.ingredient.id,
+          quantity: shortage.quantity,
+          companyId,
+          supplierId: shortage.ingredient.defaultSupplierId,
+          pickingListId: pickingListId,
+          status: PurchaseSuggestionStatus.PENDING,
+        });
+        await this.purchaseSuggestionRepo.save(suggestion);
+      }
     }
   }
 }

@@ -281,7 +281,7 @@ export class ProductionService {
         }),
       );
 
-      await this.purchasesService.createDraftPurchaseOrders(
+      await this.purchasesService.createPurchaseSuggestions(
         ingredientsToOrder,
         companyId,
       );
