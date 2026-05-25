@@ -126,7 +126,10 @@ export class MenuItemService {
 
       await queryRunner.commitTransaction();
       const finalMenuItem = await this.findOneForTenant(savedMenuItem.id, companyId);
-      await this.calculateAndCacheNutritionalInfo(finalMenuItem); // Pass the fully loaded object
+      await Promise.all([
+        this.calculateAndCacheNutritionalInfo(finalMenuItem),
+        this.calculateAndCacheProductionCost(finalMenuItem),
+      ]);
       return finalMenuItem;
     } catch (err) {
       await queryRunner.rollbackTransaction();
@@ -362,7 +365,10 @@ export class MenuItemService {
 
       await queryRunner.commitTransaction();
       const finalMenuItem = await this.findOneForTenant(menuItemToUpdate.id, companyId);
-      await this.calculateAndCacheNutritionalInfo(finalMenuItem); // Pass the fully loaded object
+      await Promise.all([
+        this.calculateAndCacheNutritionalInfo(finalMenuItem),
+        this.calculateAndCacheProductionCost(finalMenuItem),
+      ]);
       return finalMenuItem;
     } catch (err) {
       await queryRunner.rollbackTransaction();
@@ -453,6 +459,49 @@ export class MenuItemService {
     return roundedNutritionalInfo;
   }
 
+  async calculateAndCacheProductionCost(
+    menuItem: MenuItems,
+  ): Promise<number | null> {
+    if (!menuItem || menuItem.type !== MenuItemType.PRODUCTO_COMPUESTO) {
+      return menuItem?.productionCost || null;
+    }
+
+    if (!menuItem.recipeIngredients || menuItem.recipeIngredients.length === 0) {
+      await this.menuItemRepo.update(menuItem.id, { productionCost: 0 });
+      return 0;
+    }
+
+    let totalCost = 0;
+    for (const ri of menuItem.recipeIngredients) {
+      const ingredientCost = ri.ingredient?.referenceCost || 0;
+      totalCost += ingredientCost * ri.quantity;
+    }
+
+    const roundedCost = parseFloat(totalCost.toFixed(2));
+    await this.menuItemRepo.update(menuItem.id, { productionCost: roundedCost });
+
+    return roundedCost;
+  }
+
+  async recalculateProductionCostForIngredient(ingredientId: number) {
+    const menuItems = await this.menuItemRepo.find({
+      where: {
+        recipeIngredients: {
+          ingredient: {
+            id: ingredientId,
+          },
+        },
+      },
+    });
+
+    if (menuItems.length === 0) return;
+
+    const companyId = menuItems[0].companyId;
+    for (const menuItem of menuItems) {
+      const fullMenuItem = await this.findOneForTenant(menuItem.id, companyId);
+      await this.calculateAndCacheProductionCost(fullMenuItem);
+    }
+  }
 
   async recalculateNutritionalInfoForIngredient(ingredientId: number) {
     const menuItems = await this.menuItemRepo.find({

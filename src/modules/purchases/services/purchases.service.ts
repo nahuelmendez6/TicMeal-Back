@@ -134,6 +134,13 @@ export class PurchasesService {
       }
 
       for (const item of purchaseOrder.items) {
+        if (item.ingredient) {
+          // Update the ingredient's last purchase price automatically
+          await queryRunner.manager.update(Ingredient, item.ingredient.id, {
+            lastPurchasePrice: item.unitCost,
+          });
+        }
+
         await this.stockService.registerMovement(
           {
             ingredientId: item.ingredient?.id,
@@ -268,7 +275,7 @@ export class PurchasesService {
         const poItems = group.map((s) => ({
           ingredient: { id: s.ingredientId },
           quantity: s.quantity,
-          unitCost: s.ingredient.cost || 0,
+          unitCost: s.ingredient.referenceCost || 0,
           companyId,
         }));
 

@@ -174,7 +174,7 @@ export class IngredientService {
 
       await queryRunner.manager.save(ingredientToUpdate);
 
-      // Trigger sync for all related menu items if observations changed
+      // Trigger sync for all related menu items if observations, cost or nutritional info changed
       if (observationIds) {
         const relatedMenuItems = await queryRunner.manager.find(RecipeIngredient, {
           where: { ingredient: { id } },
@@ -185,13 +185,15 @@ export class IngredientService {
         }
       }
 
-      // The block that caused the error has been removed.
-      // Stock adjustments must be done via explicit calls to StockService.
-
       await queryRunner.commitTransaction();
+
       if (updateDto.nutritionalInfo) {
         await this.menuItemService.recalculateNutritionalInfoForIngredient(id);
       }
+      if (updateDto.referenceCost) {
+        await this.menuItemService.recalculateProductionCostForIngredient(id);
+      }
+
       return this.findOneForTenant(id, companyId);
     } catch (err) {
       await queryRunner.rollbackTransaction();
