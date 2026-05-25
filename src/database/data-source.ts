@@ -15,6 +15,7 @@ import { PickingListItem } from '../modules/production/entities/picking-list-ite
 import { PickingList } from '../modules/production/entities/picking-list.entity';
 import { PurchaseOrderItem } from '../modules/purchases/entities/purchase-order-item.entity';
 import { PurchaseOrder } from '../modules/purchases/entities/purchase-order.entity';
+import { PurchaseSuggestion } from '../modules/purchases/entities/purchase-suggestion.entity';
 import { Category } from '../modules/stock/entities/category.entity';
 import { IngredientCategory } from '../modules/stock/entities/ingredient-category.entity';
 import { IngredientLot } from '../modules/stock/entities/ingredient-lot.entity';
@@ -55,6 +56,7 @@ export const AppDataSource = new DataSource({
     PickingList,
     PurchaseOrderItem,
     PurchaseOrder,
+    PurchaseSuggestion,
     Category,
     IngredientCategory,
     IngredientLot,
