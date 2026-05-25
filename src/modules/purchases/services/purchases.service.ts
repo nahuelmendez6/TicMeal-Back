@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository, In } from 'typeorm';
 import { PurchaseOrder } from '../entities/purchase-order.entity';
 import { CreatePurchaseOrderDto } from '../dto/create-purchase-order.dto';
 import { PurchaseOrderStatus } from '../enums/purchase-order-status.enum';
@@ -200,5 +200,105 @@ export class PurchasesService {
         await this.purchaseSuggestionRepo.save(suggestion);
       }
     }
+  }
+
+  async findAllSuggestions(companyId: number): Promise<PurchaseSuggestion[]> {
+    return this.purchaseSuggestionRepo.find({
+      where: { companyId, status: PurchaseSuggestionStatus.PENDING } as any,
+      relations: ['ingredient', 'supplier', 'pickingList'],
+    });
+  }
+
+  async convertSuggestionsToPO(
+    suggestionIds: number[],
+    companyId: number,
+  ): Promise<PurchaseOrder[]> {
+    const suggestions = await this.purchaseSuggestionRepo.find({
+      where: {
+        id: In(suggestionIds),
+        companyId,
+        status: PurchaseSuggestionStatus.PENDING,
+      } as any,
+      relations: ['ingredient', 'supplier'],
+    });
+
+    if (suggestions.length === 0) {
+      throw new BadRequestException(
+        'No hay sugerencias válidas para convertir.',
+      );
+    }
+
+    // Group by supplier
+    const bySupplier = new Map<number | 'none', PurchaseSuggestion[]>();
+    for (const s of suggestions) {
+      const key = s.supplierId || 'none';
+      if (!bySupplier.has(key)) bySupplier.set(key, []);
+      bySupplier.get(key).push(s);
+    }
+
+    const createdPOs: PurchaseOrder[] = [];
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      for (const [supplierId, group] of bySupplier.entries()) {
+        let finalSupplierId = supplierId === 'none' ? null : supplierId;
+
+        // If no supplier, we assign the first available one as a fallback
+        if (!finalSupplierId) {
+          const allSuppliers = await this.suppliersService.findAll(companyId);
+          if (allSuppliers.length > 0) {
+            finalSupplierId = allSuppliers[0].id;
+          } else {
+            continue; // Cannot create PO without supplier
+          }
+        }
+
+        const poItems = group.map((s) => ({
+          ingredient: { id: s.ingredientId },
+          quantity: s.quantity,
+          unitCost: s.ingredient.cost || 0,
+          companyId,
+        }));
+
+        const po = this.purchaseOrderRepo.create({
+          companyId,
+          supplier: { id: finalSupplierId } as any,
+          orderDate: new Date(),
+          status: PurchaseOrderStatus.PENDING,
+          items: poItems as any,
+          notes: `Generado automáticamente desde sugerencias. IDs: ${group.map((s) => s.id).join(', ')}`,
+        });
+
+        const savedPO = await queryRunner.manager.save(po);
+        createdPOs.push(savedPO);
+
+        // Mark suggestions as converted
+        for (const s of group) {
+          s.status = PurchaseSuggestionStatus.CONVERTED;
+          await queryRunner.manager.save(s);
+        }
+      }
+
+      await queryRunner.commitTransaction();
+      return createdPOs;
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async rejectSuggestions(
+    suggestionIds: number[],
+    companyId: number,
+  ): Promise<void> {
+    await this.purchaseSuggestionRepo.update(
+      { id: In(suggestionIds), companyId } as any,
+      { status: PurchaseSuggestionStatus.REJECTED },
+    );
   }
 }
