@@ -292,7 +292,14 @@ export class PurchasesService {
       }
 
       await queryRunner.commitTransaction();
-      return createdPOs;
+
+      // IMPORTANT: Re-fetch all created POs with their full relations (names, costs, etc.)
+      // so the frontend can display them correctly immediately.
+      const fullyPopulatedPOs = await Promise.all(
+        createdPOs.map((po) => this.findOne(po.id, companyId)),
+      );
+
+      return fullyPopulatedPOs;
     } catch (err) {
       await queryRunner.rollbackTransaction();
       throw err;
