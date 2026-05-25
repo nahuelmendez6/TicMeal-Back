@@ -46,7 +46,7 @@ export class CreateMenuItemDto {
   @IsNumber()
   @Min(0)
   @Type(() => Number)
-  cost?: number;
+  productionCost?: number;
 
   @IsOptional()
   @IsInt()

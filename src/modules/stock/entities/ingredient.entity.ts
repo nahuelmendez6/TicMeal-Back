@@ -81,11 +81,18 @@ export class Ingredient extends BaseTenantEntity {
   /**
    * Optional base purchase cost for the ingredient.
    *
-   * This can serve as a reference cost when lot-level
-   * cost tracking is not available.
+   * This serves as a reference cost when lot-level
+   * cost tracking is not available, or for recipe estimation.
+   */
+  @Column({ name: 'cost', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  referenceCost: number | null;
+
+  /**
+   * Last price paid for this ingredient in a purchase order.
+   * Updated automatically upon receiving a Purchase Order.
    */
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-  cost: number | null;
+  lastPurchasePrice: number | null;
 
   /**
    * Defines how the ingredient cost is interpreted.

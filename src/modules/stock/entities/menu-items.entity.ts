@@ -34,13 +34,16 @@ export class MenuItems extends BaseTenantEntity {
   /** Cantidad disponible (calculado a partir de los lotes). */
   stock: number;
 
-  /** Nombre del ícono asociado (opcional). */
+  /** Name of associated icon (optional). */
   @Column({ type: 'varchar', length: 100, nullable: true })
   iconName: string | null;
 
-  /** Costo por unidad (precio de venta). */
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-  cost: number | null;
+  /** 
+   * Calculated production cost.
+   * Sum of ingredients reference costs or manually set base cost.
+   */
+  @Column({ name: 'cost', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  productionCost: number | null;
 
   /** Tipo de ítem del menú (simple o compuesto). */
   @Column({

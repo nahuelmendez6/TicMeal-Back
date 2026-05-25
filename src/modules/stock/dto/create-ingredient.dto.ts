@@ -37,10 +37,10 @@ export class CreateIngredientDto {
   @IsEnum(IngredientUnit)
   unit: IngredientUnit;
 
-  /** Costo opcional */
+  /** Costo de referencia opcional */
   @IsOptional()
   @IsNumber()
-  cost?: number | null;
+  referenceCost?: number | null;
 
   /** Tipo de costo opcional */
   @IsOptional()
