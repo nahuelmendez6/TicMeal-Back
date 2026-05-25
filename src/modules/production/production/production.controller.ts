@@ -84,7 +84,7 @@ export class ProductionController {
   }
 
   @Patch('picking-lists/items/:itemId')
-  @Roles('kitchen', 'kitchen_admin', 'super_admin')
+  @Roles('kitchen', 'kitchen_admin', 'super_admin', 'company_admin')
   @ApiOperation({ summary: 'Update picked quantity for a specific item' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Item updated successfully.' })
   async updatePickedQuantity(
@@ -96,7 +96,7 @@ export class ProductionController {
   }
 
   @Post('picking-lists/:id/finalize')
-  @Roles('kitchen', 'kitchen_admin', 'super_admin')
+  @Roles('kitchen', 'kitchen_admin', 'super_admin', 'company_admin')
   @ApiOperation({ summary: 'Finalize picking list and deduct stock' })
   @ApiResponse({ status: HttpStatus.OK, description: 'List finalized and stock deducted.' })
   async finalizePickingList(
