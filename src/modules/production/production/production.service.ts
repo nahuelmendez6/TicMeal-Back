@@ -433,7 +433,8 @@ export class ProductionService {
         ingredientId,
         companyId,
       );
-      if (data.quantity > quantityInStock) {
+      item.hasShortage = data.quantity > quantityInStock;
+      if (item.hasShortage) {
         hasShortage = true;
       }
 
