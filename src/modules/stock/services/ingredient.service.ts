@@ -35,6 +35,11 @@ export class IngredientService {
       ...ingredientData
     } = createDto;
 
+    // Default shrinkagePercentage to 0 if it's null
+    if (ingredientData.shrinkagePercentage === null) {
+      ingredientData.shrinkagePercentage = 0;
+    }
+
     if (categoryId) {
       await this.ingredientCategoryService.validateCategoryAvailability(
         categoryId,
@@ -50,8 +55,8 @@ export class IngredientService {
       const newIngredient = queryRunner.manager.create(Ingredient, {
         ...ingredientData,
         companyId: companyId,
-        category: categoryId ? { id: categoryId } : null,
-      });
+        category: categoryId ? ({ id: categoryId } as any) : null,
+      } as any);
 
       if (observationIds && observationIds.length > 0) {
         const observations = await queryRunner.manager.findBy(Observation, {
@@ -138,7 +143,12 @@ export class IngredientService {
         ...updateData
       } = updateDto;
 
-      queryRunner.manager.merge(Ingredient, ingredientToUpdate, updateData);
+      // Default shrinkagePercentage to 0 if it's explicitly null to avoid DB constraint violation
+      if (updateData.hasOwnProperty('shrinkagePercentage') && updateData.shrinkagePercentage === null) {
+        updateData.shrinkagePercentage = 0;
+      }
+
+      queryRunner.manager.merge(Ingredient, ingredientToUpdate, updateData as any);
 
       ingredientToUpdate.companyId = companyId;
       if (updateDto.hasOwnProperty('categoryId')) {

@@ -92,4 +92,8 @@ export class CreateIngredientDto {
 
   @IsOptional()
   nutritionalInfo?: NutritionalInfo;
+
+  @IsOptional()
+  @IsInt()
+  defaultSupplierId?: number;
 }

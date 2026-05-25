@@ -34,4 +34,7 @@ export class PickingListItem {
 
   @Column({ type: 'float', default: 0 })
   pickedQuantity: number;
+
+  @Column({ type: 'boolean', default: false })
+  hasShortage: boolean;
 }
