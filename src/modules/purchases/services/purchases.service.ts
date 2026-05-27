@@ -244,12 +244,14 @@ export class PurchasesService {
       );
     }
 
-    // Group by supplier
-    const bySupplier = new Map<number | 'none', PurchaseSuggestion[]>();
+    // Group by supplier AND picking list
+    const groups = new Map<string, PurchaseSuggestion[]>();
     for (const s of suggestions) {
-      const key = s.supplierId || 'none';
-      if (!bySupplier.has(key)) bySupplier.set(key, []);
-      bySupplier.get(key).push(s);
+      const sKey = s.supplierId || 'none';
+      const pKey = s.pickingListId || 'none';
+      const key = `${sKey}_${pKey}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(s);
     }
 
     const createdPOs: PurchaseOrder[] = [];
@@ -259,8 +261,10 @@ export class PurchasesService {
     await queryRunner.startTransaction();
 
     try {
-      for (const [supplierId, group] of bySupplier.entries()) {
-        let finalSupplierId = supplierId === 'none' ? null : supplierId;
+      for (const [key, group] of groups.entries()) {
+        const [sIdStr, pIdStr] = key.split('_');
+        let finalSupplierId = sIdStr === 'none' ? null : Number(sIdStr);
+        const finalPickingListId = pIdStr === 'none' ? null : Number(pIdStr);
 
         // If no supplier, we assign the first available one as a fallback
         if (!finalSupplierId) {
@@ -272,12 +276,29 @@ export class PurchasesService {
           }
         }
 
-        const poItems = group.map((s) => ({
-          ingredient: { id: s.ingredientId },
-          quantity: s.quantity,
-          unitCost: s.ingredient.referenceCost || 0,
+        // Consolidate items by ingredient within this PO group
+        const consolidatedItems = new Map<number, { ingredient: any, quantity: number, unitCost: number }>();
+        for (const s of group) {
+          const existing = consolidatedItems.get(s.ingredientId);
+          if (existing) {
+            existing.quantity += s.quantity;
+          } else {
+            consolidatedItems.set(s.ingredientId, {
+              ingredient: { id: s.ingredientId },
+              quantity: s.quantity,
+              unitCost: s.ingredient.referenceCost || 0,
+            });
+          }
+        }
+
+        const poItems = Array.from(consolidatedItems.values()).map((item) => ({
+          ...item,
           companyId,
         }));
+
+        const pickingListInfo = group[0].pickingList
+          ? ` para Lista de Picking #${group[0].pickingList.id}`
+          : '';
 
         const po = this.purchaseOrderRepo.create({
           companyId,
@@ -285,7 +306,7 @@ export class PurchasesService {
           orderDate: new Date(),
           status: PurchaseOrderStatus.PENDING,
           items: poItems as any,
-          notes: `Generado automáticamente desde sugerencias. IDs: ${group.map((s) => s.id).join(', ')}`,
+          notes: `Generado automáticamente desde sugerencias${pickingListInfo}. IDs Sugerencias: ${group.map((s) => s.id).join(', ')}`,
         });
 
         const savedPO = await queryRunner.manager.save(po);

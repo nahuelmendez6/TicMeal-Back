@@ -445,7 +445,7 @@ export class ReportsService {
         ing.name,
         ing.category?.name || 'Sin Categoría',
         ing.quantityInStock,
-        Number(ing.cost || 0),
+        Number(ing.referenceCost || 0),
         'ingredient',
       ),
     );
@@ -454,7 +454,7 @@ export class ReportsService {
         item.name,
         item.category?.name || 'Sin Categoría',
         item.stock,
-        Number(item.cost || 0),
+        Number(item.productionCost || 0),
         'menu_item',
       ),
     );
