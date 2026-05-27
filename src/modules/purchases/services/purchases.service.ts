@@ -143,18 +143,25 @@ export class PurchasesService {
         );
       }
 
+      if (!receiveDto || !receiveDto.items || receiveDto.items.length === 0) {
+        throw new BadRequestException('Debe proporcionar los datos de recepción de los items (lote y costo).');
+      }
+
       for (const item of purchaseOrder.items) {
-        const receivedData = receiveDto?.items?.find((ri) => ri.itemId === item.id);
+        const receivedData = receiveDto.items.find((ri) => ri.itemId === item.id);
 
-        if (receivedData) {
-          item.unitCost = receivedData.unitCost;
-          item.lot = receivedData.lot;
-          item.expirationDate = receivedData.expirationDate
-            ? new Date(receivedData.expirationDate)
-            : item.expirationDate;
-
-          await queryRunner.manager.save(item);
+        if (!receivedData) {
+          throw new BadRequestException(`Faltan datos de recepción para el item ID ${item.id}. Se requiere lote y costo para cada item.`);
         }
+
+        // Update item details with manual input
+        item.unitCost = receivedData.unitCost;
+        item.lot = receivedData.lot;
+        item.expirationDate = receivedData.expirationDate
+          ? new Date(receivedData.expirationDate)
+          : item.expirationDate;
+
+        await queryRunner.manager.save(item);
 
         if (item.ingredient) {
           // Update the ingredient's last purchase price automatically
@@ -163,6 +170,7 @@ export class PurchasesService {
           });
         }
 
+        // Register stock movement
         await this.stockService.registerMovement(
           {
             ingredientId: item.ingredient?.id,
@@ -180,13 +188,16 @@ export class PurchasesService {
         );
       }
 
-      // Update PO status and receivedAt within the transaction
-      purchaseOrder.status = PurchaseOrderStatus.COMPLETED;
-      purchaseOrder.receivedAt = new Date();
-      const updatedPO = await queryRunner.manager.save(purchaseOrder);
+      // Update PO status and receivedAt using a direct update query for reliability
+      await queryRunner.manager.update(PurchaseOrder, { id, companyId }, {
+        status: PurchaseOrderStatus.COMPLETED,
+        receivedAt: new Date(),
+      });
 
       await queryRunner.commitTransaction();
-      return updatedPO;
+      
+      // Re-fetch the final state to return it accurately
+      return this.findOne(id, companyId);
     } catch (err) {
       await queryRunner.rollbackTransaction();
       throw err;
