@@ -117,6 +117,7 @@ export class PurchasesController {
   @ApiResponse({ status: HttpStatus.OK, type: PurchaseOrder })
   async receive(
     @Param('id', ParseIntPipe) id: number,
+    @Body() receiveDto: ReceivePurchaseOrderDto,
     @Tenant() tenantId: number,
     @Req() req: any,
   ) {
@@ -124,6 +125,6 @@ export class PurchasesController {
       throw new ForbiddenException('No se pudo determinar el tenant.');
     }
     const { id: userId } = req.user;
-    return this.purchasesService.receive(id, tenantId, userId);
+    return this.purchasesService.receive(id, receiveDto, tenantId, userId);
   }
 }

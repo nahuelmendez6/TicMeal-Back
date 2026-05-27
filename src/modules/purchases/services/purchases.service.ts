@@ -118,6 +118,7 @@ export class PurchasesService {
 
   async receive(
     id: number,
+    receiveDto: ReceivePurchaseOrderDto,
     companyId: number,
     userId: number,
   ): Promise<PurchaseOrder> {
@@ -126,15 +127,35 @@ export class PurchasesService {
     await queryRunner.startTransaction();
 
     try {
-      const purchaseOrder = await this.findOne(id, companyId);
+      // Fetch PO using the transaction manager to ensure it's tracked correctly
+      const purchaseOrder = await queryRunner.manager.findOne(PurchaseOrder, {
+        where: { id, companyId } as any,
+        relations: ['items', 'items.ingredient', 'items.menuItem', 'supplier'],
+      });
+
+      if (!purchaseOrder) {
+        throw new NotFoundException(`Orden de compra con ID ${id} no encontrada.`);
+      }
 
       if (purchaseOrder.status !== PurchaseOrderStatus.PENDING) {
         throw new BadRequestException(
-          `La orden de compra ya ha sido procesada o está cancelada.`,
+          `La orden de compra ya ha sido procesada o está cancelada (Estado actual: ${purchaseOrder.status}).`,
         );
       }
 
       for (const item of purchaseOrder.items) {
+        const receivedData = receiveDto?.items?.find((ri) => ri.itemId === item.id);
+
+        if (receivedData) {
+          item.unitCost = receivedData.unitCost;
+          item.lot = receivedData.lot;
+          item.expirationDate = receivedData.expirationDate
+            ? new Date(receivedData.expirationDate)
+            : item.expirationDate;
+
+          await queryRunner.manager.save(item);
+        }
+
         if (item.ingredient) {
           // Update the ingredient's last purchase price automatically
           await queryRunner.manager.update(Ingredient, item.ingredient.id, {
@@ -148,10 +169,10 @@ export class PurchasesService {
             menuItemId: item.menuItem?.id,
             quantity: item.quantity,
             movementType: MovementType.IN,
-            reason: `Recepción de Orden de Compra #${(purchaseOrder as any).id}`,
+            reason: `Recepción de Orden de Compra #${purchaseOrder.id}`,
             unitCost: item.unitCost,
             lotNumber: item.lot,
-            expirationDate: item.expirationDate?.toString(),
+            expirationDate: item.expirationDate?.toISOString(),
           },
           companyId,
           userId,
@@ -159,6 +180,7 @@ export class PurchasesService {
         );
       }
 
+      // Update PO status and receivedAt within the transaction
       purchaseOrder.status = PurchaseOrderStatus.COMPLETED;
       purchaseOrder.receivedAt = new Date();
       const updatedPO = await queryRunner.manager.save(purchaseOrder);
@@ -331,23 +353,6 @@ export class PurchasesService {
       return fullyPopulatedPOs;
     } catch (err) {
       await queryRunner.rollbackTransaction();
-      throw err;
-    } finally {
-      await queryRunner.release();
-    }
-  }
-
-  async rejectSuggestions(
-    suggestionIds: number[],
-    companyId: number,
-  ): Promise<void> {
-    await this.purchaseSuggestionRepo.update(
-      { id: In(suggestionIds), companyId } as any,
-      { status: PurchaseSuggestionStatus.REJECTED },
-    );
-  }
-}
-unner.rollbackTransaction();
       throw err;
     } finally {
       await queryRunner.release();
