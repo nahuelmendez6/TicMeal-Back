@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, In } from 'typeorm';
 import { PurchaseOrder } from '../entities/purchase-order.entity';
 import { CreatePurchaseOrderDto } from '../dto/create-purchase-order.dto';
+import { ReceivePurchaseOrderDto } from '../dto/receive-purchase-order.dto';
 import { PurchaseOrderStatus } from '../enums/purchase-order-status.enum';
 import { StockService } from 'src/modules/stock/services/stock.service';
 import { MovementType } from 'src/modules/stock/enums/enums';
@@ -330,6 +331,23 @@ export class PurchasesService {
       return fullyPopulatedPOs;
     } catch (err) {
       await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async rejectSuggestions(
+    suggestionIds: number[],
+    companyId: number,
+  ): Promise<void> {
+    await this.purchaseSuggestionRepo.update(
+      { id: In(suggestionIds), companyId } as any,
+      { status: PurchaseSuggestionStatus.REJECTED },
+    );
+  }
+}
+unner.rollbackTransaction();
       throw err;
     } finally {
       await queryRunner.release();

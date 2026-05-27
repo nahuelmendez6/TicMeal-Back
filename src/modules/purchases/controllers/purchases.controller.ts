@@ -18,6 +18,7 @@ import {
 } from '@nestjs/swagger';
 import { PurchasesService } from '../services/purchases.service';
 import { CreatePurchaseOrderDto } from '../dto/create-purchase-order.dto';
+import { ReceivePurchaseOrderDto } from '../dto/receive-purchase-order.dto';
 import { JwtAuthGuard } from 'src/modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/modules/auth/guards/roles.guard';
 import { Roles } from 'src/modules/auth/decorators/roles.decorators';
