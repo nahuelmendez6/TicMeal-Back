@@ -16,6 +16,7 @@ import { MenuItemLot } from '../entities/menu-item-lot.entity';
 import { CreateStockAuditDto } from '../dto/create-stock-audit.dto';
 import { StockAudit } from '../entities/stock-audit.entity';
 import { StockAuditType } from '../enums/stock-audit-type.enum';
+import { PurchaseOrderItem } from 'src/modules/purchases/entities/purchase-order-item.entity';
 
 @Injectable()
 export class StockService {
@@ -388,6 +389,12 @@ export class StockService {
         existingLot.quantity += quantity;
         if (createDto.movementType === MovementType.IN) {
           existingLot.unitCost = unitCost;
+          // Si el movimiento viene de una orden de compra, actualizamos la relación
+          if (createDto.purchaseOrderItemId) {
+            existingLot.purchaseOrderItem = {
+              id: createDto.purchaseOrderItemId,
+            } as PurchaseOrderItem;
+          }
         }
         lot = await runner.manager.save(existingLot);
       } else {
@@ -398,6 +405,9 @@ export class StockService {
           unitCost,
           expirationDate: expirationDate ? new Date(expirationDate) : null,
           companyId,
+          purchaseOrderItem: createDto.purchaseOrderItemId
+            ? ({ id: createDto.purchaseOrderItemId } as PurchaseOrderItem)
+            : null,
         });
         lot = await runner.manager.save(newLot);
       }
@@ -410,6 +420,9 @@ export class StockService {
         ingredientLot: lot,
         stockAfter: lot.quantity,
         unit: ingredient.unit,
+        purchaseOrderItem: createDto.purchaseOrderItemId
+          ? ({ id: createDto.purchaseOrderItemId } as PurchaseOrderItem)
+          : null,
       });
       return runner.manager.save(movement);
     } else {
@@ -434,6 +447,12 @@ export class StockService {
         existingLot.quantity += quantity;
         if (createDto.movementType === MovementType.IN) {
           existingLot.unitCost = unitCost;
+          // Si el movimiento viene de una orden de compra, actualizamos la relación
+          if (createDto.purchaseOrderItemId) {
+            existingLot.purchaseOrderItem = {
+              id: createDto.purchaseOrderItemId,
+            } as PurchaseOrderItem;
+          }
         }
         lot = await runner.manager.save(existingLot);
       } else {
@@ -444,6 +463,9 @@ export class StockService {
           unitCost,
           expirationDate: expirationDate ? new Date(expirationDate) : null,
           companyId,
+          purchaseOrderItem: createDto.purchaseOrderItemId
+            ? ({ id: createDto.purchaseOrderItemId } as PurchaseOrderItem)
+            : null,
         });
         lot = await runner.manager.save(newLot);
       }
@@ -456,6 +478,9 @@ export class StockService {
         menuItemLot: lot,
         stockAfter: lot.quantity,
         unit: 'unit' as any,
+        purchaseOrderItem: createDto.purchaseOrderItemId
+          ? ({ id: createDto.purchaseOrderItemId } as PurchaseOrderItem)
+          : null,
       });
       return runner.manager.save(movement);
     }

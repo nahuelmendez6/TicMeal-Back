@@ -5,11 +5,14 @@ import {
   JoinColumn,
   Check,
   PrimaryGeneratedColumn,
+  OneToMany,
 } from 'typeorm';
 import { BaseTenantEntity } from 'src/common/entities/base-tenant.entity';
 import { PurchaseOrder } from './purchase-order.entity';
 import { Ingredient } from 'src/modules/stock/entities/ingredient.entity';
 import { MenuItems } from 'src/modules/stock/entities/menu-items.entity';
+import { IngredientLot } from 'src/modules/stock/entities/ingredient-lot.entity';
+import { MenuItemLot } from 'src/modules/stock/entities/menu-item-lot.entity';
 
 @Entity('purchase_order_items')
 @Check(
@@ -42,4 +45,10 @@ export class PurchaseOrderItem extends BaseTenantEntity {
 
   @Column({ type: 'date', nullable: true })
   expirationDate: Date | null;
+
+  @OneToMany(() => IngredientLot, (lot) => lot.purchaseOrderItem)
+  ingredientLots: IngredientLot[];
+
+  @OneToMany(() => MenuItemLot, (lot) => lot.purchaseOrderItem)
+  menuItemLots: MenuItemLot[];
 }

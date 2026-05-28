@@ -1,8 +1,8 @@
 
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './src/app.module';
-import { IngredientService } from './src/modules/stock/services/ingredient.service';
-import { UpdateIngredientDto } from './src/modules/stock/dto/update-ingredient.dto';
+import { AppModule } from './app.module';
+import { IngredientService } from './modules/stock/services/ingredient.service';
+import { UpdateIngredientDto } from './modules/stock/dto/update-ingredient.dto';
 
 async function reproduce() {
   const app = await NestFactory.createApplicationContext(AppModule);

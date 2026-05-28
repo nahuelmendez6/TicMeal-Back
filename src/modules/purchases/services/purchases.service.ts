@@ -48,14 +48,17 @@ export class PurchasesService {
       // Validate supplier
       await this.suppliersService.findOne(supplierId, companyId);
 
+      let totalAmount = 0;
       const itemsToCreate = [];
       for (const itemDto of items) {
-        const { ingredientId, menuItemId } = itemDto;
+        const { ingredientId, menuItemId, unitCost, quantity } = itemDto;
         if ((!ingredientId && !menuItemId) || (ingredientId && menuItemId)) {
           throw new BadRequestException(
             'Cada item debe tener un ingredientId o un menuItemId, pero no ambos.',
           );
         }
+
+        totalAmount += (unitCost || 0) * (quantity || 0);
 
         if (ingredientId) {
           await this.ingredientService.findOneForTenant(
@@ -82,6 +85,7 @@ export class PurchasesService {
         supplier: { id: supplierId } as any,
         companyId,
         items: itemsToCreate,
+        totalAmount,
       });
 
       const savedPO = await queryRunner.manager.save(newPurchaseOrder);
@@ -147,6 +151,7 @@ export class PurchasesService {
         throw new BadRequestException('Debe proporcionar los datos de recepción de los items (lote y costo).');
       }
 
+      let totalAmount = 0;
       for (const item of purchaseOrder.items) {
         const receivedData = receiveDto.items.find((ri) => ri.itemId === item.id);
 
@@ -160,6 +165,8 @@ export class PurchasesService {
         item.expirationDate = receivedData.expirationDate
           ? new Date(receivedData.expirationDate)
           : item.expirationDate;
+
+        totalAmount += item.unitCost * item.quantity;
 
         await queryRunner.manager.save(item);
 
@@ -181,6 +188,7 @@ export class PurchasesService {
             unitCost: item.unitCost,
             lotNumber: item.lot,
             expirationDate: item.expirationDate?.toISOString(),
+            purchaseOrderItemId: item.id,
           },
           companyId,
           userId,
@@ -188,10 +196,11 @@ export class PurchasesService {
         );
       }
 
-      // Update PO status and receivedAt using a direct update query for reliability
+      // Update PO status, receivedAt and final totalAmount using a direct update query for reliability
       await queryRunner.manager.update(PurchaseOrder, { id, companyId }, {
         status: PurchaseOrderStatus.COMPLETED,
         receivedAt: new Date(),
+        totalAmount,
       });
 
       await queryRunner.commitTransaction();
@@ -311,6 +320,7 @@ export class PurchasesService {
         }
 
         // Consolidate items by ingredient within this PO group
+        let totalAmount = 0;
         const consolidatedItems = new Map<number, { ingredient: any, quantity: number, unitCost: number }>();
         for (const s of group) {
           const existing = consolidatedItems.get(s.ingredientId);
@@ -323,6 +333,7 @@ export class PurchasesService {
               unitCost: s.ingredient.referenceCost || 0,
             });
           }
+          totalAmount += s.quantity * (s.ingredient.referenceCost || 0);
         }
 
         const poItems = Array.from(consolidatedItems.values()).map((item) => ({
@@ -340,6 +351,7 @@ export class PurchasesService {
           orderDate: new Date(),
           status: PurchaseOrderStatus.PENDING,
           items: poItems as any,
+          totalAmount,
           notes: `Generado automáticamente desde sugerencias${pickingListInfo}. IDs Sugerencias: ${group.map((s) => s.id).join(', ')}`,
         });
 

@@ -10,6 +10,7 @@ import {
 import { BaseTenantEntity } from 'src/common/entities/base-tenant.entity';
 import { Ingredient } from './ingredient.entity';
 import { StockMovement } from './stock-movement.entity';
+import { PurchaseOrderItem } from 'src/modules/purchases/entities/purchase-order-item.entity';
 
 /**
  * IngredientLot
@@ -56,6 +57,14 @@ export class IngredientLot extends BaseTenantEntity {
   })
   @JoinColumn({ name: 'ingredientId' })
   ingredient: Ingredient;
+
+  /**
+   * Purchase order item that created this lot.
+   * Used for cost traceability.
+   */
+  @ManyToOne(() => PurchaseOrderItem, { nullable: true })
+  @JoinColumn({ name: 'purchaseOrderItemId' })
+  purchaseOrderItem: PurchaseOrderItem | null;
 
   /**
    * Supplier or production lot number.

@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './src/app.module';
-import { UsersService } from './src/modules/users/services/user.service';
-import { User } from './src/modules/users/entities/user.entity';
+import { AppModule } from './app.module';
+import { UsersService } from './modules/users/services/user.service';
+import { User } from './modules/users/entities/user.entity';
 import { DataSource } from 'typeorm';
 
 async function resetPassword() {

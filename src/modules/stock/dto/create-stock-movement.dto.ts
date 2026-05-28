@@ -65,4 +65,8 @@ export class CreateStockMovementDto {
   @IsOptional()
   @IsNumber()
   auditId?: number;
+
+  @IsOptional()
+  @IsNumber()
+  purchaseOrderItemId?: number;
 }

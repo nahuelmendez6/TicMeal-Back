@@ -1,10 +1,10 @@
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
-import { User } from './src/modules/users/entities/user.entity';
-import { Company } from './src/modules/companies/entities/company.entity';
-import { Observation } from './src/modules/users/entities/observation.entity';
-import { Ticket } from './src/modules/tickets/entities/ticket.entity';
+import { User } from './modules/users/entities/user.entity';
+import { Company } from './modules/companies/entities/company.entity';
+import { Observation } from './modules/users/entities/observation.entity';
+import { Ticket } from './modules/tickets/entities/ticket.entity';
 
 dotenv.config();
 

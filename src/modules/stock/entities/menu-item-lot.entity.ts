@@ -10,6 +10,7 @@ import {
 import { BaseTenantEntity } from 'src/common/entities/base-tenant.entity';
 import { MenuItems } from './menu-items.entity';
 import { StockMovement } from './stock-movement.entity';
+import { PurchaseOrderItem } from 'src/modules/purchases/entities/purchase-order-item.entity';
 
 @Entity('menu_item_lots')
 @Index(['menuItem', 'lotNumber', 'companyId'], { unique: true })
@@ -23,6 +24,14 @@ export class MenuItemLot extends BaseTenantEntity {
   })
   @JoinColumn({ name: 'menuItemId' })
   menuItem: MenuItems;
+
+  /**
+   * Purchase order item that created this lot.
+   * Used for cost traceability.
+   */
+  @ManyToOne(() => PurchaseOrderItem, { nullable: true })
+  @JoinColumn({ name: 'purchaseOrderItemId' })
+  purchaseOrderItem: PurchaseOrderItem | null;
 
   @Column({ length: 100 })
   lotNumber: string;

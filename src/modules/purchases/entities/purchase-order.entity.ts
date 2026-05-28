@@ -39,6 +39,9 @@ export class PurchaseOrder extends BaseTenantEntity {
   })
   items: PurchaseOrderItem[];
 
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+  totalAmount: number;
+
   @Column({ type: 'timestamp', nullable: true })
   receivedAt: Date | null;
 

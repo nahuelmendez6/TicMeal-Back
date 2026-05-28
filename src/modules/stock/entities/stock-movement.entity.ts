@@ -14,6 +14,7 @@ import { User } from 'src/modules/users/entities/user.entity';
 import { IngredientLot } from './ingredient-lot.entity';
 import { MenuItemLot } from './menu-item-lot.entity';
 import { StockAudit } from './stock-audit.entity';
+import { PurchaseOrderItem } from 'src/modules/purchases/entities/purchase-order-item.entity';
 
 @Entity('stock_movements')
 export class StockMovement extends BaseTenantEntity {
@@ -42,6 +43,13 @@ export class StockMovement extends BaseTenantEntity {
   @ManyToOne(() => MenuItemLot, (lot) => lot.stockMovements, { nullable: true })
   @JoinColumn({ name: 'menuItemLotId' })
   menuItemLot: MenuItemLot | null;
+
+  /**
+   * Purchase order item associated with this movement.
+   */
+  @ManyToOne(() => PurchaseOrderItem, { nullable: true })
+  @JoinColumn({ name: 'purchaseOrderItemId' })
+  purchaseOrderItem: PurchaseOrderItem | null;
 
   @Column({ type: 'enum', enum: MovementType })
   movementType: MovementType;
