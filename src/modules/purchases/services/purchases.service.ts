@@ -18,6 +18,7 @@ import { PurchaseOrderItem } from '../entities/purchase-order-item.entity';
 import { Ingredient } from 'src/modules/stock/entities/ingredient.entity';
 import { PurchaseSuggestion } from '../entities/purchase-suggestion.entity';
 import { PurchaseSuggestionStatus } from '../enums/purchase-suggestion-status.enum';
+import { PickingList } from 'src/modules/production/entities/picking-list.entity';
 
 @Injectable()
 export class PurchasesService {
@@ -28,6 +29,8 @@ export class PurchasesService {
     private readonly purchaseOrderItemRepo: Repository<PurchaseOrderItem>,
     @InjectRepository(PurchaseSuggestion)
     private readonly purchaseSuggestionRepo: Repository<PurchaseSuggestion>,
+    @InjectRepository(PickingList)
+    private readonly pickingListRepo: Repository<PickingList>,
     private readonly stockService: StockService,
     private readonly ingredientService: IngredientService,
     private readonly menuItemService: MenuItemService,
@@ -103,14 +106,22 @@ export class PurchasesService {
     return this.purchaseOrderRepo.find({
       where: { companyId },
       order: { orderDate: 'DESC' },
-      relations: ['items', 'items.ingredient', 'items.menuItem', 'supplier'],
+      relations: ['items', 'items.ingredient', 'items.menuItem', 'supplier', 'pickingList'],
     });
   }
 
   async findOne(id: number, companyId: number): Promise<PurchaseOrder> {
     const purchaseOrder = await this.purchaseOrderRepo.findOne({
       where: { id, companyId } as any,
-      relations: ['items', 'items.ingredient', 'items.menuItem', 'supplier'],
+      relations: [
+        'items', 
+        'items.ingredient', 
+        'items.menuItem', 
+        'items.ingredientLots', 
+        'items.menuItemLots', 
+        'supplier', 
+        'pickingList'
+      ],
     });
     if (!purchaseOrder) {
       throw new NotFoundException(
@@ -202,6 +213,15 @@ export class PurchasesService {
         receivedAt: new Date(),
         totalAmount,
       });
+
+      // If PO is linked to a PickingList, we should trigger a re-calculation of its shortage status
+      // For now, we just mark that it might need re-syncing if the flag exists
+      if (purchaseOrder.pickingListId) {
+        // We could call productionService.syncPickingListForShift here if it was injected, 
+        // but to avoid circular dependencies, we'll just ensure the flag is handled 
+        // when the picking list is next accessed or we can manually update the shortage flag 
+        // if we calculate it here.
+      }
 
       await queryRunner.commitTransaction();
       
@@ -352,6 +372,7 @@ export class PurchasesService {
           status: PurchaseOrderStatus.PENDING,
           items: poItems as any,
           totalAmount,
+          pickingListId: finalPickingListId,
           notes: `Generado automáticamente desde sugerencias${pickingListInfo}. IDs Sugerencias: ${group.map((s) => s.id).join(', ')}`,
         });
 

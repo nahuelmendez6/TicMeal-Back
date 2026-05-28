@@ -11,6 +11,7 @@ import { BaseTenantEntity } from 'src/common/entities/base-tenant.entity';
 import { PurchaseOrderStatus } from '../enums/purchase-order-status.enum';
 import { PurchaseOrderItem } from './purchase-order-item.entity';
 import { Supplier } from 'src/modules/suppliers/entities/supplier.entity';
+import { PickingList } from 'src/modules/production/entities/picking-list.entity';
 
 @Entity('purchase_orders')
 export class PurchaseOrder extends BaseTenantEntity {
@@ -23,6 +24,13 @@ export class PurchaseOrder extends BaseTenantEntity {
   @ManyToOne(() => Supplier, (supplier) => supplier.purchaseOrders)
   @JoinColumn({ name: 'supplierId' })
   supplier: Supplier;
+
+  @ManyToOne(() => PickingList, { nullable: true })
+  @JoinColumn({ name: 'pickingListId' })
+  pickingList: PickingList | null;
+
+  @Column({ nullable: true })
+  pickingListId: number | null;
 
   @Column({
     type: 'enum',
