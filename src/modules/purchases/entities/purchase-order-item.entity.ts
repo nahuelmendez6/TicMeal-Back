@@ -37,6 +37,9 @@ export class PurchaseOrderItem extends BaseTenantEntity {
   @Column({ type: 'float' })
   quantity: number;
 
+  @Column({ type: 'float', nullable: true })
+  receivedQuantity: number | null;
+
   @Column({ type: 'float' })
   unitCost: number;
 

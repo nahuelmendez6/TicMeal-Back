@@ -16,6 +16,7 @@ import { MenuItemService } from 'src/modules/stock/services/menu-item.service';
 import { SuppliersService } from 'src/modules/suppliers/services/suppliers.service';
 import { PurchaseOrderItem } from '../entities/purchase-order-item.entity';
 import { Ingredient } from 'src/modules/stock/entities/ingredient.entity';
+import { MenuItems } from 'src/modules/stock/entities/menu-items.entity';
 import { PurchaseSuggestion } from '../entities/purchase-suggestion.entity';
 import { PurchaseSuggestionStatus } from '../enums/purchase-suggestion-status.enum';
 import { PickingList } from 'src/modules/production/entities/picking-list.entity';
@@ -171,19 +172,25 @@ export class PurchasesService {
         }
 
         // Update item details with manual input
+        item.receivedQuantity = receivedData.receivedQuantity;
         item.unitCost = receivedData.unitCost;
         item.lot = receivedData.lot;
         item.expirationDate = receivedData.expirationDate
           ? new Date(receivedData.expirationDate)
           : item.expirationDate;
 
-        totalAmount += item.unitCost * item.quantity;
+        totalAmount += item.unitCost * item.receivedQuantity;
 
         await queryRunner.manager.save(item);
 
         if (item.ingredient) {
           // Update the ingredient's last purchase price automatically
           await queryRunner.manager.update(Ingredient, item.ingredient.id, {
+            lastPurchasePrice: item.unitCost,
+          });
+        } else if (item.menuItem) {
+          // Update the menu item's last purchase price automatically
+          await queryRunner.manager.update(MenuItems, item.menuItem.id, {
             lastPurchasePrice: item.unitCost,
           });
         }
@@ -193,7 +200,7 @@ export class PurchasesService {
           {
             ingredientId: item.ingredient?.id,
             menuItemId: item.menuItem?.id,
-            quantity: item.quantity,
+            quantity: item.receivedQuantity,
             movementType: MovementType.IN,
             reason: `Recepción de Orden de Compra #${purchaseOrder.id}`,
             unitCost: item.unitCost,
@@ -215,12 +222,8 @@ export class PurchasesService {
       });
 
       // If PO is linked to a PickingList, we should trigger a re-calculation of its shortage status
-      // For now, we just mark that it might need re-syncing if the flag exists
       if (purchaseOrder.pickingListId) {
-        // We could call productionService.syncPickingListForShift here if it was injected, 
-        // but to avoid circular dependencies, we'll just ensure the flag is handled 
-        // when the picking list is next accessed or we can manually update the shortage flag 
-        // if we calculate it here.
+        // Triggered when the picking list is next accessed or synced
       }
 
       await queryRunner.commitTransaction();

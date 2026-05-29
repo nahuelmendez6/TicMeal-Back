@@ -45,6 +45,13 @@ export class MenuItems extends BaseTenantEntity {
   @Column({ name: 'cost', type: 'decimal', precision: 10, scale: 2, nullable: true })
   productionCost: number | null;
 
+  /**
+   * Last price paid for this menu item in a purchase order.
+   * Updated automatically upon receiving a Purchase Order.
+   */
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
+  lastPurchasePrice: number | null;
+
   /** Tipo de ítem del menú (simple o compuesto). */
   @Column({
     type: 'enum',

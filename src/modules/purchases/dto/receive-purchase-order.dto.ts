@@ -17,6 +17,12 @@ export class ReceivePurchaseOrderItemDto {
   @IsNumber()
   itemId: number;
 
+  @ApiProperty({ description: 'Cantidad real recibida' })
+  @IsNotEmpty()
+  @IsNumber()
+  @Min(0)
+  receivedQuantity: number;
+
   @ApiProperty({ description: 'Costo unitario real al recibir' })
   @IsNotEmpty()
   @IsNumber()

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { PurchaseOrder } from './entities/purchase-order.entity';
 import { PurchaseOrderItem } from './entities/purchase-order-item.entity';
 import { PurchaseSuggestion } from './entities/purchase-suggestion.entity';
+import { PickingList } from 'src/modules/production/entities/picking-list.entity';
 import { PurchasesService } from './services/purchases.service';
 import { PurchasesController } from './controllers/purchases.controller';
 import { StockModule } from 'src/modules/stock/stock.module';
@@ -14,6 +15,7 @@ import { SuppliersModule } from '../suppliers/suppliers.module';
       PurchaseOrder,
       PurchaseOrderItem,
       PurchaseSuggestion,
+      PickingList,
     ]),
     StockModule, // Import StockModule to use StockService and IngredientService
     SuppliersModule, // Import SuppliersModule to use SuppliersService
